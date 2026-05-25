@@ -1,4 +1,8 @@
-// ==================== ЛОКАЛЬНАЯ ВЕРСИЯ (localStorage) ====================
+// ==================== SUPABASE НАСТРОЙКА ====================
+const SUPABASE_URL = 'https://sjmubbiqceluomzbwwzw.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_2PVFcZgK_9TIR38CLZLf8w_dQ3R6aLn';
+
+let supabase = null;
 let currentRole = 'user';
 let currentUser = null;
 let currentAdminTab = 'orders';
@@ -9,45 +13,156 @@ let workers = [];
 const ADMIN_LOGIN = 'DaniilBuzakov';
 const ADMIN_PASSWORD = '123654123Aa@';
 
-// Начальные данные
-const defaultPriceList = [
-    { id: 'p1', name: 'Замена камеры', price: 500 },
-    { id: 'p2', name: 'Настройка переключателей', price: 700 },
-    { id: 'p3', name: 'Замена тормозных колодок', price: 600 },
-    { id: 'p4', name: 'Смазка цепи', price: 300 },
-    { id: 'p5', name: 'Ремонт колеса', price: 900 },
-    { id: 'p6', name: 'Диагностика', price: 500 }
-];
-
-const defaultWorkers = [
-    { id: 'w1', name: 'Алексей', phone: '+7 999 123-45-67', login: 'alexey', password: '123' },
-    { id: 'w2', name: 'Дмитрий', phone: '+7 999 234-56-78', login: 'dmitry', password: '123' },
-    { id: 'w3', name: 'Сергей', phone: '+7 999 345-67-89', login: 'sergey', password: '123' }
-];
+// Инициализация Supabase
+try {
+    if (typeof window.supabase !== 'undefined') {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+            auth: { persistSession: true },
+            global: { headers: { 'x-application-name': 'khv-bike-repair' } }
+        });
+        console.log('✅ Supabase подключен');
+    }
+} catch(e) { console.error('Ошибка Supabase:', e); }
 
 function generateId() { return Date.now() + '-' + Math.random().toString(36).substr(2, 8); }
 
-// Сохранение в localStorage
+// ==================== РАБОТА С ДАННЫМИ ====================
 function saveToLocal() {
-    localStorage.setItem('khv_orders_v2', JSON.stringify(orders));
-    localStorage.setItem('khv_prices_v2', JSON.stringify(priceList));
-    localStorage.setItem('khv_workers_v2', JSON.stringify(workers));
-    console.log('💾 Сохранено');
+    localStorage.setItem('khv_orders', JSON.stringify(orders));
+    localStorage.setItem('khv_prices', JSON.stringify(priceList));
+    localStorage.setItem('khv_workers', JSON.stringify(workers));
 }
 
 function loadFromLocal() {
-    const savedOrders = localStorage.getItem('khv_orders_v2');
-    const savedPrices = localStorage.getItem('khv_prices_v2');
-    const savedWorkers = localStorage.getItem('khv_workers_v2');
-    
-    orders = savedOrders ? JSON.parse(savedOrders) : [];
-    priceList = savedPrices ? JSON.parse(savedPrices) : defaultPriceList;
-    workers = savedWorkers ? JSON.parse(savedWorkers) : defaultWorkers;
-    console.log('📂 Загружено:', orders.length, 'заказов');
+    orders = JSON.parse(localStorage.getItem('khv_orders') || '[]');
+    priceList = JSON.parse(localStorage.getItem('khv_prices') || '[]');
+    workers = JSON.parse(localStorage.getItem('khv_workers') || '[]');
 }
 
-function saveAll() {
+// Загрузка из Supabase
+async function loadFromSupabase() {
+    if (!supabase) {
+        loadFromLocal();
+        render();
+        return;
+    }
+    
+    console.log('🔄 Загрузка из Supabase...');
+    
+    try {
+        // Загружаем заказы
+        const { data: ordersData, error: ordersError } = await supabase
+            .from('repair_orders')
+            .select('*')
+            .order('created_at', { ascending: false });
+        
+        if (ordersError) throw ordersError;
+        if (ordersData) {
+            orders = ordersData.map(o => ({
+                id: o.id,
+                fio: o.fio,
+                phone: o.phone,
+                address: o.address,
+                desiredTime: o.desired_time,
+                problem: o.problem,
+                status: o.status,
+                workerId: o.worker_id,
+                workerName: o.worker_name,
+                services: o.services || [],
+                parts: o.parts || [],
+                total: o.total || 0,
+                note: o.note || '',
+                createdAt: o.created_at
+            }));
+            console.log('✅ Заказов загружено:', orders.length);
+        }
+        
+        // Загружаем прайс
+        const { data: pricesData, error: pricesError } = await supabase
+            .from('price_list')
+            .select('*');
+        if (pricesError) throw pricesError;
+        if (pricesData) {
+            priceList = pricesData;
+            console.log('✅ Прайс загружен:', priceList.length);
+        }
+        
+        // Загружаем работников
+        const { data: workersData, error: workersError } = await supabase
+            .from('workers')
+            .select('*');
+        if (workersError) throw workersError;
+        if (workersData) {
+            workers = workersData;
+            console.log('✅ Работники загружены:', workers.length);
+        }
+        
+        saveToLocal();
+    } catch(e) {
+        console.error('❌ Ошибка загрузки:', e);
+        loadFromLocal();
+    }
+    render();
+    checkHash();
+}
+
+// Сохранение в Supabase
+async function saveToSupabase() {
+    if (!supabase) return;
+    
+    console.log('☁️ Сохранение в Supabase...');
+    
+    try {
+        // Сохраняем заказы
+        for (const order of orders) {
+            const dbOrder = {
+                id: order.id,
+                fio: order.fio,
+                phone: order.phone,
+                address: order.address || '',
+                desired_time: order.desiredTime || '',
+                problem: order.problem || '',
+                status: order.status || 'new',
+                worker_id: order.workerId || null,
+                worker_name: order.workerName || null,
+                services: order.services || [],
+                parts: order.parts || [],
+                total: order.total || 0,
+                note: order.note || '',
+                created_at: order.createdAt || Date.now()
+            };
+            
+            const { error } = await supabase
+                .from('repair_orders')
+                .upsert(dbOrder, { onConflict: 'id' });
+            if (error) console.error('Ошибка сохранения заказа:', error);
+        }
+        
+        // Сохраняем прайс
+        for (const item of priceList) {
+            const { error } = await supabase
+                .from('price_list')
+                .upsert(item, { onConflict: 'id' });
+            if (error) console.error('Ошибка сохранения прайса:', error);
+        }
+        
+        // Сохраняем работников
+        for (const worker of workers) {
+            const { error } = await supabase
+                .from('workers')
+                .upsert(worker, { onConflict: 'id' });
+            if (error) console.error('Ошибка сохранения работника:', error);
+        }
+        
+        console.log('✅ Данные сохранены в Supabase');
+    } catch(e) {
+        console.error('❌ Ошибка сохранения:', e);
+    }
+}
+
+async function saveAll() {
     saveToLocal();
+    await saveToSupabase();
 }
 
 const app = document.getElementById('app');
@@ -86,14 +201,14 @@ function renderUser() {
         </div>
     `;
     
-    document.getElementById('requestForm')?.addEventListener('submit', (e) => {
+    document.getElementById('requestForm')?.addEventListener('submit', async (e) => {
         e.preventDefault();
         const fio = document.getElementById('fio').value.trim();
         const phone = document.getElementById('phone').value.trim();
         const address = document.getElementById('address').value.trim();
         if (!fio || !phone || !address) { alert('Заполните все поля'); return; }
         
-        orders.unshift({
+        const newOrder = {
             id: generateId(),
             fio, phone, address,
             desiredTime: document.getElementById('time').value,
@@ -106,8 +221,10 @@ function renderUser() {
             total: 0,
             note: '',
             createdAt: Date.now()
-        });
-        saveAll();
+        };
+        
+        orders.unshift(newOrder);
+        await saveAll();
         alert('✅ Заявка отправлена!');
         document.getElementById('requestForm').reset();
         render();
@@ -188,20 +305,20 @@ function renderAdmin() {
             `).join('')}
         `;
         
-        document.getElementById('addPriceBtn')?.addEventListener('click', () => {
+        document.getElementById('addPriceBtn')?.addEventListener('click', async () => {
             const name = document.getElementById('newPriceName').value.trim();
             const price = parseInt(document.getElementById('newPriceCost').value);
             if (name && price > 0) {
                 priceList.push({ id: generateId(), name, price });
-                saveAll();
+                await saveAll();
                 renderAdmin();
             } else alert('Введите название и цену');
         });
         
         document.querySelectorAll('[data-del]').forEach(btn => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', async () => {
                 priceList = priceList.filter(p => p.id !== btn.dataset.del);
-                saveAll();
+                await saveAll();
                 renderAdmin();
             });
         });
@@ -226,22 +343,22 @@ function renderAdmin() {
             `).join('')}
         `;
         
-        document.getElementById('addWorkerBtn')?.addEventListener('click', () => {
+        document.getElementById('addWorkerBtn')?.addEventListener('click', async () => {
             const name = document.getElementById('newWorkerName').value.trim();
             const phone = document.getElementById('newWorkerPhone').value.trim();
             const login = document.getElementById('newWorkerLogin').value.trim();
             const password = document.getElementById('newWorkerPassword').value;
             if (name && phone && login && password) {
                 workers.push({ id: generateId(), name, phone, login, password });
-                saveAll();
+                await saveAll();
                 renderAdmin();
             } else alert('Заполните все поля');
         });
         
         document.querySelectorAll('[data-del]').forEach(btn => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', async () => {
                 workers = workers.filter(w => w.id !== btn.dataset.del);
-                saveAll();
+                await saveAll();
                 renderAdmin();
             });
         });
@@ -289,18 +406,16 @@ function renderOrdersList(ordersList) {
     `).join('');
 }
 
-// ==================== МОДАЛЬНОЕ ОКНО РЕДАКТИРОВАНИЯ ЗАКАЗА ====================
+// ==================== МОДАЛЬНОЕ ОКНО РЕДАКТИРОВАНИЯ ====================
 function openEditOrderModal(orderId) {
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
     
-    // Копируем данные для редактирования
     let services = order.services ? [...order.services] : [];
     let parts = order.parts ? [...order.parts] : [];
     
     const modal = document.createElement('div');
     modal.className = 'modal';
-    modal.id = 'editOrderModal';
     modal.innerHTML = `
         <div class="modal-content" style="max-width: 700px; max-height: 85vh; overflow-y: auto;">
             <div class="modal-header">
@@ -308,7 +423,6 @@ function openEditOrderModal(orderId) {
                 <button class="modal-close" id="closeModal">&times;</button>
             </div>
             
-            <!-- Информация о клиенте -->
             <div style="background: #f1f5f9; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
                 <h4>👤 Информация о клиенте</h4>
                 <div class="form-group"><label>ФИО</label><input type="text" id="editFio" value="${escapeHtml(order.fio)}"></div>
@@ -318,50 +432,46 @@ function openEditOrderModal(orderId) {
                 <div class="form-group"><label>Описание проблемы</label><textarea id="editProblem" rows="2">${escapeHtml(order.problem || '')}</textarea></div>
             </div>
             
-            <!-- Услуги -->
             <div style="margin-bottom: 1rem;">
                 <h4>🛠 Услуги</h4>
                 <div id="servicesList"></div>
                 <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
                     <select id="serviceSelect" class="btn-sm" style="flex:2;">
                         <option value="">-- Выберите услугу --</option>
-                        ${priceList.map(p => `<option value="${p.id}" data-price="${p.price}">${escapeHtml(p.name)} - ${p.price}₽</option>`).join('')}
+                        ${priceList.map(p => `<option value="${p.id}">${escapeHtml(p.name)} - ${p.price}₽</option>`).join('')}
                     </select>
-                    <input type="number" id="serviceQty" placeholder="Кол-во" value="1" min="1" style="width: 80px;">
+                    <input type="number" id="serviceQty" value="1" min="1" style="width: 80px;">
                     <button class="btn-sm" id="addServiceBtn">➕ Добавить</button>
                 </div>
             </div>
             
-            <!-- Запчасти -->
             <div style="margin-bottom: 1rem;">
                 <h4>🔩 Запчасти</h4>
                 <div id="partsList"></div>
                 <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                    <input type="text" id="partName" placeholder="Название запчасти" style="flex:2;">
+                    <input type="text" id="partName" placeholder="Название" style="flex:2;">
                     <input type="number" id="partPrice" placeholder="Цена" style="width: 100px;">
-                    <input type="number" id="partQty" placeholder="Кол-во" value="1" style="width: 80px;">
+                    <input type="number" id="partQty" value="1" style="width: 80px;">
                     <button class="btn-sm" id="addPartBtn">➕ Добавить</button>
                 </div>
             </div>
             
-            <!-- Заметка -->
             <div class="form-group">
                 <label>📝 Заметка</label>
-                <textarea id="editNote" rows="2" placeholder="Внутренняя заметка...">${escapeHtml(order.note || '')}</textarea>
+                <textarea id="editNote" rows="2">${escapeHtml(order.note || '')}</textarea>
             </div>
             
-            <!-- Назначение мастера и статус -->
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                 <div class="form-group">
                     <label>👨‍🔧 Мастер</label>
-                    <select id="editWorker" class="btn-sm">
+                    <select id="editWorker">
                         <option value="">-- Не назначен --</option>
                         ${workers.map(w => `<option value="${w.id}" ${order.workerId === w.id ? 'selected' : ''}>${escapeHtml(w.name)}</option>`).join('')}
                     </select>
                 </div>
                 <div class="form-group">
                     <label>📊 Статус</label>
-                    <select id="editStatus" class="btn-sm">
+                    <select id="editStatus">
                         <option value="new" ${order.status === 'new' ? 'selected' : ''}>🟡 Новый</option>
                         <option value="calculated" ${order.status === 'calculated' ? 'selected' : ''}>💰 Рассчитан</option>
                         <option value="agreed" ${order.status === 'agreed' ? 'selected' : ''}>✅ Согласован</option>
@@ -371,7 +481,6 @@ function openEditOrderModal(orderId) {
                 </div>
             </div>
             
-            <!-- Итого и кнопки -->
             <div id="orderTotal" style="margin-top: 1rem; padding: 0.75rem; background: #eef2ff; border-radius: 0.5rem; text-align: center; font-weight: bold;">
                 💰 Общая стоимость: ${order.total || 0} ₽
             </div>
@@ -384,12 +493,11 @@ function openEditOrderModal(orderId) {
     `;
     document.body.appendChild(modal);
     
-    // Функции обновления списков
     function updateServicesList() {
         const container = document.getElementById('servicesList');
         if (!container) return;
         container.innerHTML = services.map((s, idx) => `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; border-bottom: 1px solid #e2e8f0;">
+            <div style="display: flex; justify-content: space-between; padding: 0.25rem 0; border-bottom: 1px solid #e2e8f0;">
                 <span>${escapeHtml(s.name)} x${s.quantity} = ${s.price * s.quantity}₽</span>
                 <button class="btn-sm" data-remove-service="${idx}" style="background:#ef4444;color:white;">✖</button>
             </div>
@@ -408,7 +516,7 @@ function openEditOrderModal(orderId) {
         const container = document.getElementById('partsList');
         if (!container) return;
         container.innerHTML = parts.map((p, idx) => `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; border-bottom: 1px solid #e2e8f0;">
+            <div style="display: flex; justify-content: space-between; padding: 0.25rem 0; border-bottom: 1px solid #e2e8f0;">
                 <span>${escapeHtml(p.name)} x${p.quantity} = ${p.price * p.quantity}₽</span>
                 <button class="btn-sm" data-remove-part="${idx}" style="background:#ef4444;color:white;">✖</button>
             </div>
@@ -432,7 +540,6 @@ function openEditOrderModal(orderId) {
         return total;
     }
     
-    // Добавление услуги
     document.getElementById('addServiceBtn')?.addEventListener('click', () => {
         const select = document.getElementById('serviceSelect');
         const serviceId = select.value;
@@ -442,18 +549,15 @@ function openEditOrderModal(orderId) {
         if (!service) return;
         
         const existing = services.find(s => s.id === serviceId);
-        if (existing) {
-            existing.quantity += qty;
-        } else {
-            services.push({ id: serviceId, name: service.name, price: service.price, quantity: qty });
-        }
+        if (existing) existing.quantity += qty;
+        else services.push({ id: serviceId, name: service.name, price: service.price, quantity: qty });
+        
         updateTotal();
         updateServicesList();
-        document.getElementById('serviceSelect').value = '';
+        select.value = '';
         document.getElementById('serviceQty').value = '1';
     });
     
-    // Добавление запчасти
     document.getElementById('addPartBtn')?.addEventListener('click', () => {
         const name = document.getElementById('partName').value.trim();
         const price = parseInt(document.getElementById('partPrice').value);
@@ -468,8 +572,7 @@ function openEditOrderModal(orderId) {
         document.getElementById('partQty').value = '1';
     });
     
-    // Сохранение
-    document.getElementById('saveOrderBtn')?.addEventListener('click', () => {
+    document.getElementById('saveOrderBtn')?.addEventListener('click', async () => {
         const fio = document.getElementById('editFio').value.trim();
         if (!fio) { alert('Введите ФИО'); return; }
         
@@ -486,43 +589,29 @@ function openEditOrderModal(orderId) {
         order.parts = parts;
         order.total = updateTotal();
         
-        saveAll();
+        await saveAll();
         alert('✅ Изменения сохранены!');
         modal.remove();
         renderAdmin();
     });
     
-    // Закрытие
     document.getElementById('closeModal')?.addEventListener('click', () => modal.remove());
     document.getElementById('cancelBtn')?.addEventListener('click', () => modal.remove());
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
-    
-    // Удаление заказа из модального окна
-    document.querySelectorAll('[data-delete]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            if (confirm('Удалить заказ?')) {
-                orders = orders.filter(o => o.id !== btn.dataset.delete);
-                saveAll();
-                modal.remove();
-                renderAdmin();
-            }
-        });
-    });
     
     updateServicesList();
     updatePartsList();
     updateTotal();
 }
 
-// Глобальная функция для вызова из onclick
 window.openEditOrderModal = openEditOrderModal;
 
-// Удаление заказа (для кнопок в списке)
-document.addEventListener('click', (e) => {
+// Удаление заказа
+document.addEventListener('click', async (e) => {
     if (e.target.matches('[data-delete]')) {
         if (confirm('Удалить заказ?')) {
             orders = orders.filter(o => o.id !== e.target.dataset.delete);
-            saveAll();
+            await saveAll();
             renderAdmin();
         }
     }
@@ -547,7 +636,7 @@ function openCreateModal() {
     document.getElementById('closeModal')?.addEventListener('click', close);
     modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
     
-    document.getElementById('saveModalBtn')?.addEventListener('click', () => {
+    document.getElementById('saveModalBtn')?.addEventListener('click', async () => {
         const fio = document.getElementById('modalFio').value.trim();
         const phone = document.getElementById('modalPhone').value.trim();
         if (!fio || !phone) { alert('Заполните ФИО и телефон'); return; }
@@ -566,7 +655,7 @@ function openCreateModal() {
             note: '',
             createdAt: Date.now()
         });
-        saveAll();
+        await saveAll();
         alert('✅ Заказ создан!');
         close();
         renderAdmin();
@@ -598,8 +687,6 @@ function renderWorker() {
                         <strong>${escapeHtml(o.fio)}</strong><br>
                         📞 ${escapeHtml(o.phone)}<br>
                         📍 ${escapeHtml(o.address || '—')}<br>
-                        📝 ${escapeHtml(o.problem || '—')}<br>
-                        🛠 ${o.services?.map(s => `${s.name} x${s.quantity}`).join(', ') || '—'}<br>
                         💰 ${o.total || 0} ₽<br>
                         <button data-complete="${o.id}" class="btn-sm btn-success">✅ Завершить</button>
                     </div>
@@ -617,11 +704,11 @@ function renderWorker() {
     });
     
     document.querySelectorAll('[data-complete]').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             const order = orders.find(o => o.id === btn.dataset.complete);
             if (order && confirm('Завершить заказ?')) {
                 order.status = 'completed';
-                saveAll();
+                await saveAll();
                 renderWorker();
             }
         });
@@ -646,7 +733,7 @@ function showLoginModal(role) {
             <div class="modal-header"><h3>Вход в ${role === 'admin' ? 'Админ-панель' : 'Кабинет мастера'}</h3><button class="modal-close" id="closeModal">&times;</button></div>
             <div class="form-group"><label>Логин</label><input type="text" id="loginInput"></div>
             <div class="form-group"><label>Пароль</label><input type="password" id="passwordInput"></div>
-            <div id="loginError" style="color:red;display:none;">Неверный логин или пароль</div>
+            <div id="loginError" style="color:red;display:none;"></div>
             <button class="btn-primary" id="submitLogin">Войти</button>
         </div>
     `;
@@ -666,8 +753,9 @@ function showLoginModal(role) {
                 close();
                 render();
             } else {
-                document.getElementById('loginError').style.display = 'block';
-                document.getElementById('loginError').textContent = 'Неверный логин или пароль админа';
+                const err = document.getElementById('loginError');
+                err.style.display = 'block';
+                err.textContent = 'Неверный логин или пароль админа';
             }
         } else {
             const worker = workers.find(w => w.login === login && w.password === password);
@@ -677,8 +765,9 @@ function showLoginModal(role) {
                 close();
                 render();
             } else {
-                document.getElementById('loginError').style.display = 'block';
-                document.getElementById('loginError').textContent = 'Неверный логин или пароль мастера';
+                const err = document.getElementById('loginError');
+                err.style.display = 'block';
+                err.textContent = 'Неверный логин или пароль мастера';
             }
         }
     });
@@ -693,6 +782,4 @@ function checkHash() {
 window.addEventListener('hashchange', () => { if (currentRole === 'user') checkHash(); });
 
 // ==================== ЗАПУСК ====================
-loadFromLocal();
-render();
-checkHash();
+loadFromSupabase();
