@@ -36,7 +36,7 @@ function loadFromLocal() {
     workers = JSON.parse(localStorage.getItem('khv_workers') || '[]');
 }
 
-// Загрузка из Supabase (используем repair_orders)
+// Загрузка из Supabase - ИСПРАВЛЕНО: используем repair_orders
 async function loadFromSupabase() {
     if (!supabaseClient) {
         loadFromLocal();
@@ -45,8 +45,29 @@ async function loadFromSupabase() {
     }
     
     try {
-        const { data: o } = await supabaseClient.from('repair_orders').select('*');
-        if (o && o.length) orders = o;
+        // Используем repair_orders вместо orders!
+        const { data: o, error: ordersError } = await supabaseClient.from('repair_orders').select('*');
+        if (ordersError) throw ordersError;
+        if (o && o.length) {
+            // Преобразуем поля из БД в формат приложения
+            orders = o.map(item => ({
+                id: item.id,
+                fio: item.fio,
+                phone: item.phone,
+                address: item.address,
+                desiredTime: item.desiredtime || item.desiredTime,
+                problem: item.problem,
+                status: item.status,
+                workerId: item.workerid || item.workerId,
+                workerName: item.workername || item.workerName,
+                services: item.services || [],
+                parts: item.parts || [],
+                total: item.total || 0,
+                note: item.note,
+                createdAt: item.created_at
+            }));
+            console.log('✅ Заказов загружено:', orders.length);
+        }
         
         const { data: p } = await supabaseClient.from('price_list').select('*');
         if (p && p.length) priceList = p;
@@ -55,7 +76,6 @@ async function loadFromSupabase() {
         if (w && w.length) workers = w;
         
         saveToLocal();
-        console.log('✅ Загружено:', orders.length, 'заказов');
     } catch(e) { 
         console.error('Ошибка загрузки:', e); 
         loadFromLocal(); 
@@ -63,28 +83,27 @@ async function loadFromSupabase() {
     render();
 }
 
-// Сохранение в Supabase
+// Сохранение в Supabase - ИСПРАВЛЕНО: используем repair_orders
 async function saveToSupabase() {
     if (!supabaseClient) return;
     try {
         // Сохраняем заказы в repair_orders
         for (const order of orders) {
-            // Преобразуем поля для новой таблицы
             const repairOrder = {
                 id: order.id,
                 fio: order.fio,
                 phone: order.phone,
                 address: order.address || '',
-                desiredTime: order.desiredTime || '',
+                desiredtime: order.desiredTime || '',
                 problem: order.problem || '',
                 status: order.status || 'new',
-                workerId: order.workerId || null,
-                workerName: order.workerName || null,
+                workerid: order.workerId || null,
+                workername: order.workerName || null,
                 services: order.services || [],
                 parts: order.parts || [],
                 total: order.total || 0,
-                note: order.note || order.adminNote || '',
-                created_at: order.createdAt || order.created_at || Date.now()
+                note: order.note || '',
+                created_at: order.createdAt || Date.now()
             };
             
             const { error } = await supabaseClient.from('repair_orders').upsert(repairOrder);
