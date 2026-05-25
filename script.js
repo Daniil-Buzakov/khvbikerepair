@@ -560,85 +560,113 @@ function attachModalHandlers() {
 
 // ==================== ЧАСТЬ МАСТЕРА ====================
 function renderWorker() {
-    const myOrders = orders.filter(o => o.workerId === currentUser?.id && o.status !== 'completed');
-    const completedOrders = orders.filter(o => o.workerId === currentUser?.id && o.status === 'completed');
+    // Проверка что currentUser существует
+    if (!currentUser) {
+        console.error('currentUser не определен');
+        showLoginModal('worker');
+        return;
+    }
+    
+    // Безопасное получение заказов мастера
+    const myOrders = (orders || []).filter(o => o.workerId === currentUser.id && o.status !== 'completed');
+    const completedOrders = (orders || []).filter(o => o.workerId === currentUser.id && o.status === 'completed');
     const completedCount = completedOrders.length;
-    const earned = completedOrders.reduce((s, o) => s + o.total, 0);
+    const earned = completedOrders.reduce((s, o) => s + (o.total || 0), 0);
     
     app.innerHTML = `
         <div class="app">
-            <div class="header"><div class="header-left"><h1>🔧 ${escapeHtml(currentUser?.name)}</h1></div><button class="btn-sm" id="logoutBtn" style="background:#ef4444;color:white;">Выйти</button></div>
+            <div class="header">
+                <div class="header-left">
+                    <button class="menu-btn" id="menuButton">☰</button>
+                    <h1>🔧 ${escapeHtml(currentUser.name || 'Мастер')}</h1>
+                </div>
+                <button class="btn-sm" id="logoutBtn" style="background:#ef4444;color:white;">Выйти</button>
+            </div>
+            ${drawerOverlayWorker()}
             <div class="content">
                 <div class="stats-card" style="margin-bottom: 1rem;">
-                    <div class="stats-value">${completedCount}</div><div class="stats-label">Выполнено заказов</div>
-                    <div class="stats-value">${earned} ₽</div><div class="stats-label">Заработано</div>
+                    <div class="stats-value">${completedCount}</div>
+                    <div class="stats-label">Выполнено заказов</div>
+                    <div class="stats-value">${earned} ₽</div>
+                    <div class="stats-label">Заработано</div>
                 </div>
                 <h2>📋 Мои активные заказы (${myOrders.length})</h2>
-                <div id="ordersList">${myOrders.map(o => `
-                    <div class="order-card">
-                        <div class="order-header"><strong>${escapeHtml(o.fio)}</strong><span class="order-status status-${o.status}">${getStatusText(o.status)}</span></div>
-                        <div>📞 ${escapeHtml(o.phone)}</div>
-                        <div>📍 ${escapeHtml(o.address || '—')}</div>
-                        <div>📅 ${o.desiredTime ? new Date(o.desiredTime).toLocaleString() : 'время не указано'}</div>
-                        <div class="order-problem">📝 ${escapeHtml(o.problem || '—')}</div>
-                        ${o.services && o.services.length > 0 ? `<div>🛠 ${o.services.map(s => `${s.name} x${s.quantity}`).join(', ')}</div>` : ''}
-                        <div><strong>💰 Сумма: ${o.total} ₽</strong></div>
-                        <div class="order-actions" style="margin-top: 0.5rem;">
-                            <button class="btn-sm btn-success" data-complete="${o.id}">✅ Завершить заказ</button>
-                        </div>
-                    </div>
-                `).join('')}</div>
+                <div id="ordersList">
+                    ${myOrders.length === 0 ? '<div style="text-align:center; padding:2rem; color:#888;">Нет активных заказов</div>' : 
+                        myOrders.map(o => `
+                            <div class="order-card">
+                                <div class="order-header">
+                                    <strong>${escapeHtml(o.fio || '—')}</strong>
+                                    <span class="order-status status-${o.status}">${getStatusText(o.status)}</span>
+                                </div>
+                                <div>📞 ${escapeHtml(o.phone || '—')}</div>
+                                <div>📍 ${escapeHtml(o.address || '—')}</div>
+                                <div>📅 ${o.desiredTime ? new Date(o.desiredTime).toLocaleString() : 'время не указано'}</div>
+                                ${o.problem ? `<div class="order-problem">📝 ${escapeHtml(o.problem)}</div>` : ''}
+                                ${o.services && o.services.length > 0 ? `<div>🛠 ${o.services.map(s => `${s.name} x${s.quantity}`).join(', ')}</div>` : ''}
+                                <div><strong>💰 Сумма: ${o.total || 0} ₽</strong></div>
+                                <div class="order-actions" style="margin-top: 0.5rem;">
+                                    <button class="btn-sm btn-success" data-complete="${o.id}">✅ Завершить заказ</button>
+                                </div>
+                            </div>
+                        `).join('')
+                    }
+                </div>
             </div>
         </div>
     `;
     
-    document.getElementById('logoutBtn')?.addEventListener('click', () => { currentRole = 'user'; currentUser = null; window.location.hash = ''; render(); });
-    document.querySelectorAll('[data-complete]').forEach(b => b.addEventListener('click', () => {
-        const order = orders.find(o => o.id === b.dataset.complete);
-        if (order && confirm('Завершить заказ?')) { order.status = 'completed'; saveAll(); renderWorker(); }
-    }));
+    // Обработчики
+    document.getElementById('logoutBtn')?.addEventListener('click', () => { 
+        currentRole = 'user'; 
+        currentUser = null; 
+        window.location.hash = ''; 
+        render(); 
+    });
+    
+    document.querySelectorAll('[data-complete]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const order = orders.find(o => o.id === btn.dataset.complete);
+            if (order && confirm('Завершить заказ?')) { 
+                order.status = 'completed'; 
+                saveAll(); 
+                renderWorker(); 
+            }
+        });
+    });
+    
+    // Меню для мастера
+    const menuBtn = document.getElementById('menuButton');
+    const overlay = document.getElementById('drawerOverlay');
+    const closeBtn = document.getElementById('closeDrawerBtn');
+    
+    if (menuBtn) menuBtn.onclick = () => toggleDrawer(true);
+    if (closeBtn) closeBtn.onclick = () => toggleDrawer(false);
+    if (overlay) overlay.onclick = (e) => { if (e.target === overlay) toggleDrawer(false); };
 }
 
-function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
-}
-
-function showLoginModal(role) {
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    modal.innerHTML = `
-        <div class="modal-content" style="max-width:350px;">
-            <div class="modal-header"><h3>Вход в ${role === 'admin' ? 'Админ-панель' : 'Кабинет мастера'}</h3><button class="modal-close" id="closeModal">&times;</button></div>
-            <div class="form-group"><label>Логин</label><input type="text" id="loginInput"></div>
-            <div class="form-group"><label>Пароль</label><input type="password" id="passwordInput"></div>
-            <button class="btn-primary" id="submitLogin" style="width:100%;">Войти</button>
+function drawerOverlayWorker() {
+    return `
+        <div class="drawer-overlay" id="drawerOverlay">
+            <div class="drawer">
+                <div class="drawer-header">📋 Меню мастера</div>
+                <ul class="drawer-nav">
+                    <li data-section="my-orders" class="active">📋 Мои заказы</li>
+                    <li data-section="my-stats">📊 Моя статистика</li>
+                </ul>
+                <div class="close-drawer" id="closeDrawerBtn">✖ Закрыть</div>
+            </div>
         </div>
     `;
-    document.body.appendChild(modal);
-    const close = () => modal.remove();
-    document.getElementById('closeModal')?.addEventListener('click', close);
-    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
-    document.getElementById('submitLogin')?.addEventListener('click', () => {
-        const login = document.getElementById('loginInput').value.trim();
-        const password = document.getElementById('passwordInput').value;
-        if (role === 'admin' && login === ADMIN_LOGIN && password === ADMIN_PASSWORD) {
-            currentRole = 'admin'; currentUser = null; close(); render();
-        } else if (role === 'worker') {
-            const w = workers.find(w => w.login === login && w.password === password);
-            if (w) { currentRole = 'worker'; currentUser = w; close(); render(); }
-            else alert('Неверный логин или пароль');
-        } else alert('Неверный логин или пароль');
-    });
 }
 
-function checkHash() {
-    const hash = window.location.hash;
-    if (hash === '#admin' && currentRole === 'user') showLoginModal('admin');
-    else if (hash === '#worker' && currentRole === 'user') showLoginModal('worker');
+function toggleDrawer(open) {
+    const overlay = document.getElementById('drawerOverlay');
+    if (overlay) {
+        if (open) overlay.classList.add('open');
+        else overlay.classList.remove('open');
+    }
 }
-
-window.addEventListener('hashchange', () => { if (currentRole === 'user') checkHash(); });
 
 // Запуск
 loadFromSupabase();
