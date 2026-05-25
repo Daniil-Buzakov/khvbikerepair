@@ -1,3 +1,38 @@
+// Добавьте в начало script.js
+
+// Инициализация Supabase (зарегистрируйтесь на supabase.com и получите ключи)
+const SUPABASE_URL = 'https://sjmubbiqceluomzbwwzw.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_bqoiJCZkj7A_32LW49zfUg_xD8tS29A';
+
+// Функции для работы с Supabase
+async function loadDataFromCloud() {
+    // Загрузка заказов
+    const { data: ordersData } = await supabase.from('orders').select('*');
+    if (ordersData) orders = ordersData;
+    
+    // Загрузка прайса
+    const { data: pricesData } = await supabase.from('price_list').select('*');
+    if (pricesData) priceList = pricesData;
+    
+    // Загрузка работников
+    const { data: workersData } = await supabase.from('workers').select('*');
+    if (workersData) workers = workersData;
+    
+    render();
+}
+
+async function saveOrdersToCloud() {
+    await supabase.from('orders').upsert(orders);
+}
+
+async function savePricesToCloud() {
+    await supabase.from('price_list').upsert(priceList);
+}
+
+async function saveWorkersToCloud() {
+    await supabase.from('workers').upsert(workers);
+}
+
 // --- Роли пользователей ---
 const ROLES = {
     USER: 'user',
