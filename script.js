@@ -1,6 +1,6 @@
 // ==================== SUPABASE НАСТРОЙКА ====================
 const KHV_SUPABASE_URL = 'https://sjmubbiqceluomzbwwzw.supabase.co';
-const KHV_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqbXVjYmlxY2VsdW9temJ3d3p3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzUwNjQwMDAsImV4cCI6MjA1MDY0MDAwMH0';
+const KHV_SUPABASE_KEY = 'sb_publishable_bqoiJCZkj7A_32LW49zfUg_xD8tS29A';
 
 // Создаем Supabase клиент (используем уникальное имя)
 let khvSupabase = null;
