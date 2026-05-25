@@ -9,7 +9,6 @@ let currentAdminTab = 'orders';
 let orders = [];
 let priceList = [];
 let workers = [];
-let showCreateOrderModal = false;
 
 const ADMIN_LOGIN = 'DaniilBuzakov';
 const ADMIN_PASSWORD = '123654123Aa@';
@@ -18,44 +17,45 @@ const ADMIN_PASSWORD = '123654123Aa@';
 try {
     if (typeof window.supabase !== 'undefined') {
         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        console.log('✅ Supabase подключен');
+        console.log('✅ Supabase клиент создан');
+    } else {
+        console.log('⚠️ Supabase библиотека не загружена');
     }
-} catch(e) { console.error('Supabase error:', e); }
+} catch(e) { console.error('❌ Ошибка Supabase:', e); }
 
-function generateId() { return Date.now() + '-' + Math.random().toString(36).substr(2, 8); }
+function generateId() { 
+    return Date.now() + '-' + Math.random().toString(36).substr(2, 8); 
+}
 
-// Сохранение в localStorage
+// ==================== РАБОТА С ДАННЫМИ ====================
 function saveToLocal() {
-    localStorage.setItem('khv_orders', JSON.stringify(orders));
-    localStorage.setItem('khv_prices', JSON.stringify(priceList));
-    localStorage.setItem('khv_workers', JSON.stringify(workers));
-}
-
-// Загрузка из localStorage
-function loadFromLocal() {
-    const savedOrders = localStorage.getItem('khv_orders');
-    const savedPrices = localStorage.getItem('khv_prices');
-    const savedWorkers = localStorage.getItem('khv_workers');
-    
-    orders = savedOrders ? JSON.parse(savedOrders) : [];
-    priceList = savedPrices ? JSON.parse(savedPrices) : [];
-    workers = savedWorkers ? JSON.parse(savedWorkers) : [];
-}
-
-// Сохранение в Supabase
-async function saveToSupabase() {
-    if (!supabaseClient) return;
     try {
-        if (orders.length) await supabaseClient.from('orders').upsert(orders);
-        if (priceList.length) await supabaseClient.from('price_list').upsert(priceList);
-        if (workers.length) await supabaseClient.from('workers').upsert(workers);
-        console.log('✅ Сохранено в Supabase');
+        localStorage.setItem('khv_orders', JSON.stringify(orders));
+        localStorage.setItem('khv_prices', JSON.stringify(priceList));
+        localStorage.setItem('khv_workers', JSON.stringify(workers));
+        console.log('💾 Сохранено в localStorage');
     } catch(e) { console.error('Ошибка сохранения:', e); }
 }
 
-// Загрузка из Supabase
+function loadFromLocal() {
+    try {
+        const savedOrders = localStorage.getItem('khv_orders');
+        const savedPrices = localStorage.getItem('khv_prices');
+        const savedWorkers = localStorage.getItem('khv_workers');
+        
+        orders = savedOrders ? JSON.parse(savedOrders) : [];
+        priceList = savedPrices ? JSON.parse(savedPrices) : [];
+        workers = savedWorkers ? JSON.parse(savedWorkers) : [];
+        
+        console.log('📂 Загружено из localStorage:', orders.length, 'заказов,', priceList.length, 'услуг,', workers.length, 'работников');
+    } catch(e) { console.error('Ошибка загрузки:', e); }
+}
+
 async function loadFromSupabase() {
+    console.log('🔄 Загрузка из Supabase...');
+    
     if (!supabaseClient) {
+        console.log('⚠️ Supabase не доступен, используем localStorage');
         loadFromLocal();
         render();
         checkHash();
@@ -63,22 +63,68 @@ async function loadFromSupabase() {
     }
     
     try {
-        const { data: o } = await supabaseClient.from('orders').select('*');
-        if (o && o.length) orders = o;
+        // Загружаем заказы
+        const { data: ordersData, error: ordersError } = await supabaseClient.from('orders').select('*');
+        if (ordersError) throw ordersError;
+        if (ordersData && ordersData.length > 0) {
+            orders = ordersData;
+            console.log('✅ Заказов загружено:', orders.length);
+        } else {
+            console.log('⚠️ Заказов в Supabase нет');
+        }
         
-        const { data: p } = await supabaseClient.from('price_list').select('*');
-        if (p && p.length) priceList = p;
+        // Загружаем прайс
+        const { data: pricesData, error: pricesError } = await supabaseClient.from('price_list').select('*');
+        if (pricesError) throw pricesError;
+        if (pricesData && pricesData.length > 0) {
+            priceList = pricesData;
+            console.log('✅ Прайс загружен:', priceList.length, 'позиций');
+        } else {
+            console.log('⚠️ Прайс в Supabase пуст');
+        }
         
-        const { data: w } = await supabaseClient.from('workers').select('*');
-        if (w && w.length) workers = w;
+        // Загружаем работников
+        const { data: workersData, error: workersError } = await supabaseClient.from('workers').select('*');
+        if (workersError) throw workersError;
+        if (workersData && workersData.length > 0) {
+            workers = workersData;
+            console.log('✅ Работники загружены:', workers.length);
+        } else {
+            console.log('⚠️ Работников в Supabase нет');
+        }
         
+        // Сохраняем в localStorage для кэша
         saveToLocal();
+        
     } catch(e) {
-        console.error('Ошибка загрузки:', e);
+        console.error('❌ Ошибка загрузки из Supabase:', e);
         loadFromLocal();
     }
+    
     render();
     checkHash();
+}
+
+async function saveToSupabase() {
+    if (!supabaseClient) return;
+    
+    try {
+        if (orders.length > 0) {
+            const { error } = await supabaseClient.from('orders').upsert(orders);
+            if (error) throw error;
+        }
+        if (priceList.length > 0) {
+            const { error } = await supabaseClient.from('price_list').upsert(priceList);
+            if (error) throw error;
+        }
+        if (workers.length > 0) {
+            const { error } = await supabaseClient.from('workers').upsert(workers);
+            if (error) throw error;
+        }
+        console.log('☁️ Сохранено в Supabase');
+    } catch(e) {
+        console.error('❌ Ошибка сохранения в Supabase:', e);
+    }
 }
 
 function saveAll() {
@@ -89,6 +135,13 @@ function saveAll() {
 const app = document.getElementById('app');
 
 function render() {
+    if (!app) {
+        console.error('app элемент не найден!');
+        return;
+    }
+    
+    console.log('Рендер роли:', currentRole);
+    
     if (currentRole === 'user') renderUser();
     else if (currentRole === 'admin') renderAdmin();
     else if (currentRole === 'worker') renderWorker();
@@ -98,9 +151,16 @@ function render() {
 function renderUser() {
     app.innerHTML = `
         <div class="app">
-            <div class="header"><div class="header-left"><h1>🚲 KHV Bike Repair</h1></div></div>
+            <div class="header">
+                <div class="header-left">
+                    <h1>🚲 KHV Bike Repair</h1>
+                </div>
+            </div>
             <div class="content">
-                <div class="hero"><h1>🚲 Ремонт велосипедов с выездом на дом</h1><p>Профессиональный ремонт, настройка и обслуживание</p></div>
+                <div class="hero">
+                    <h1>🚲 Ремонт велосипедов с выездом на дом</h1>
+                    <p>Профессиональный ремонт, настройка и обслуживание</p>
+                </div>
                 <div class="services-grid">
                     <div class="service-card"><div class="service-icon">🔧</div><h3>Диагностика</h3><p>Бесплатно</p></div>
                     <div class="service-card"><div class="service-icon">🛠️</div><h3>Любой ремонт</h3><p>Качественно</p></div>
@@ -126,20 +186,33 @@ function renderUser() {
         const fio = document.getElementById('fio').value.trim();
         const phone = document.getElementById('phone').value.trim();
         const address = document.getElementById('address').value.trim();
-        if (!fio || !phone || !address) { alert('Заполните все поля'); return; }
+        if (!fio || !phone || !address) { 
+            alert('Заполните все поля'); 
+            return; 
+        }
         
-        orders.unshift({
-            id: generateId(), fio, phone, address,
+        const newOrder = {
+            id: generateId(),
+            fio: fio,
+            phone: phone,
+            address: address,
             desiredTime: document.getElementById('time').value,
             problem: document.getElementById('problem').value,
-            status: 'new', workerId: null, workerName: null,
-            services: [], parts: [], total: 0,
+            status: 'new',
+            workerId: null,
+            workerName: null,
+            services: [],
+            parts: [],
+            total: 0,
             adminNote: '',
             createdAt: Date.now()
-        });
+        };
+        
+        orders.unshift(newOrder);
         saveAll();
         alert('✅ Заявка отправлена! Ожидайте звонка мастера.');
         document.getElementById('requestForm').reset();
+        render();
     });
 }
 
@@ -148,7 +221,10 @@ function renderAdmin() {
     app.innerHTML = `
         <div class="app">
             <div class="header">
-                <div class="header-left"><button class="menu-btn" id="menuButton">☰</button><h1>👑 Админ панель</h1></div>
+                <div class="header-left">
+                    <button class="menu-btn" id="menuButton">☰</button>
+                    <h1>👑 Админ панель</h1>
+                </div>
                 <button class="btn-sm" id="logoutBtn" style="background:#ef4444; color:white;">Выйти</button>
             </div>
             <div class="admin-menu">
@@ -161,12 +237,22 @@ function renderAdmin() {
         </div>
     `;
     
-    document.getElementById('logoutBtn')?.addEventListener('click', () => { currentRole = 'user'; currentUser = null; window.location.hash = ''; render(); });
+    document.getElementById('logoutBtn')?.addEventListener('click', () => { 
+        currentRole = 'user'; 
+        currentUser = null; 
+        window.location.hash = ''; 
+        render(); 
+    });
+    
     document.querySelectorAll('.admin-menu-btn').forEach(btn => {
-        btn.addEventListener('click', () => { currentAdminTab = btn.dataset.tab; renderAdmin(); });
+        btn.addEventListener('click', () => { 
+            currentAdminTab = btn.dataset.tab; 
+            renderAdmin(); 
+        });
     });
     
     const content = document.getElementById('adminContent');
+    if (!content) return;
     
     if (currentAdminTab === 'orders') {
         const newOrders = orders.filter(o => o.status === 'new');
@@ -177,58 +263,136 @@ function renderAdmin() {
         
         content.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h2>📋 Управление заказами</h2>
+                <h2>📋 Управление заказами (${orders.length})</h2>
                 <button class="btn-primary" id="showCreateOrderBtn">➕ Создать заказ</button>
             </div>
             
-            ${renderOrderSection('🟡 Новые заказы (требуют расчета)', newOrders)}
-            ${renderOrderSection('💰 Рассчитанные (ждут согласования)', calculatedOrders)}
-            ${renderOrderSection('✅ Согласованные (назначить мастера)', agreedOrders)}
-            ${renderOrderSection('🔧 Назначенные мастерам', assignedOrders)}
-            ${renderOrderSection('🏁 Завершённые', completedOrders)}
+            <div style="margin: 1rem 0;">
+                <h3>🟡 Новые заказы (${newOrders.length})</h3>
+                ${renderOrdersList(newOrders)}
+            </div>
+            <div style="margin: 1rem 0;">
+                <h3>💰 Рассчитанные (${calculatedOrders.length})</h3>
+                ${renderOrdersList(calculatedOrders)}
+            </div>
+            <div style="margin: 1rem 0;">
+                <h3>✅ Согласованные (${agreedOrders.length})</h3>
+                ${renderOrdersList(agreedOrders)}
+            </div>
+            <div style="margin: 1rem 0;">
+                <h3>🔧 Назначенные (${assignedOrders.length})</h3>
+                ${renderOrdersList(assignedOrders)}
+            </div>
+            <div style="margin: 1rem 0;">
+                <h3>🏁 Завершённые (${completedOrders.length})</h3>
+                ${renderOrdersList(completedOrders)}
+            </div>
         `;
         
-        document.getElementById('showCreateOrderBtn')?.addEventListener('click', () => {
-            showCreateOrderModal = true;
-            openCreateOrderModal();
+        document.getElementById('showCreateOrderBtn')?.addEventListener('click', () => openCreateOrderModal());
+        
+        // Привязываем обработчики к кнопкам
+        document.querySelectorAll('[data-process]').forEach(btn => {
+            btn.addEventListener('click', () => openOrderModal(btn.dataset.process));
+        });
+        document.querySelectorAll('[data-delete-order]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (confirm('Удалить заказ?')) {
+                    orders = orders.filter(o => o.id !== btn.dataset.deleteOrder);
+                    saveAll();
+                    renderAdmin();
+                }
+            });
         });
         
-        attachModalHandlers();
-    }
-    else if (currentAdminTab === 'price') {
+    } else if (currentAdminTab === 'price') {
         content.innerHTML = `
             <h2>💰 Прайс-лист</h2>
-            <div class="form-card"><div class="form-group"><label>Название услуги</label><input id="newPriceName"></div><div class="form-group"><label>Цена (₽)</label><input id="newPriceCost" type="number"></div><button class="btn-primary" id="addPriceBtn">➕ Добавить услугу</button></div>
-            <div id="priceList">${priceList.map(p => `<div class="price-item"><span><strong>${escapeHtml(p.name)}</strong> — ${p.price} ₽</span><button data-del="${p.id}" class="btn-sm" style="background:#ef4444;color:white;">Удалить</button></div>`).join('')}</div>
+            <div class="form-card">
+                <div class="form-group"><label>Название услуги</label><input id="newPriceName" placeholder="Например: Замена камеры"></div>
+                <div class="form-group"><label>Цена (₽)</label><input id="newPriceCost" type="number" placeholder="500"></div>
+                <button class="btn-primary" id="addPriceBtn">➕ Добавить услугу</button>
+            </div>
+            <div id="priceListContainer">
+                ${priceList.map(p => `
+                    <div class="price-item">
+                        <span><strong>${escapeHtml(p.name)}</strong> — ${p.price} ₽</span>
+                        <button data-del="${p.id}" class="btn-sm" style="background:#ef4444;color:white;">Удалить</button>
+                    </div>
+                `).join('')}
+            </div>
         `;
+        
         document.getElementById('addPriceBtn')?.addEventListener('click', () => {
             const name = document.getElementById('newPriceName').value.trim();
             const price = parseInt(document.getElementById('newPriceCost').value);
-            if (name && price > 0) { priceList.push({ id: generateId(), name, price }); saveAll(); renderAdmin(); }
-            else alert('Введите название и цену');
+            if (name && price > 0) { 
+                priceList.push({ id: generateId(), name, price }); 
+                saveAll(); 
+                renderAdmin(); 
+            } else {
+                alert('Введите название и цену');
+            }
         });
-        document.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => { priceList = priceList.filter(p => p.id !== b.dataset.del); saveAll(); renderAdmin(); }));
-    }
-    else if (currentAdminTab === 'workers') {
+        
+        document.querySelectorAll('[data-del]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                priceList = priceList.filter(p => p.id !== btn.dataset.del);
+                saveAll();
+                renderAdmin();
+            });
+        });
+        
+    } else if (currentAdminTab === 'workers') {
         content.innerHTML = `
             <h2>👨‍🔧 Работники</h2>
-            <div class="form-card"><div class="form-group"><label>Имя мастера</label><input id="newWorkerName"></div><div class="form-group"><label>Телефон</label><input id="newWorkerPhone"></div><div class="form-group"><label>Логин</label><input id="newWorkerLogin"></div><div class="form-group"><label>Пароль</label><input id="newWorkerPassword" type="password"></div><button class="btn-primary" id="addWorkerBtn">➕ Добавить мастера</button></div>
-            <div id="workersList">${workers.map(w => `<div class="worker-card"><strong>${escapeHtml(w.name)}</strong><br>📞 ${escapeHtml(w.phone)}<br>🔑 Логин: ${escapeHtml(w.login)}<br><button data-del="${w.id}" class="btn-sm" style="background:#ef4444;color:white;margin-top:0.5rem;">Удалить</button></div>`).join('')}</div>
+            <div class="form-card">
+                <div class="form-group"><label>Имя мастера</label><input id="newWorkerName" placeholder="Имя"></div>
+                <div class="form-group"><label>Телефон</label><input id="newWorkerPhone" placeholder="+7 XXX XXX-XX-XX"></div>
+                <div class="form-group"><label>Логин</label><input id="newWorkerLogin" placeholder="Логин для входа"></div>
+                <div class="form-group"><label>Пароль</label><input id="newWorkerPassword" type="password" placeholder="Пароль"></div>
+                <button class="btn-primary" id="addWorkerBtn">➕ Добавить мастера</button>
+            </div>
+            <div id="workersListContainer">
+                ${workers.map(w => `
+                    <div class="worker-card">
+                        <strong>${escapeHtml(w.name)}</strong><br>
+                        📞 ${escapeHtml(w.phone)}<br>
+                        🔑 Логин: ${escapeHtml(w.login)}<br>
+                        <button data-del="${w.id}" class="btn-sm" style="background:#ef4444;color:white;margin-top:0.5rem;">Удалить</button>
+                    </div>
+                `).join('')}
+            </div>
         `;
+        
         document.getElementById('addWorkerBtn')?.addEventListener('click', () => {
             const name = document.getElementById('newWorkerName').value.trim();
             const phone = document.getElementById('newWorkerPhone').value.trim();
             const login = document.getElementById('newWorkerLogin').value.trim();
             const password = document.getElementById('newWorkerPassword').value;
-            if (name && phone && login && password) { workers.push({ id: generateId(), name, phone, login, password }); saveAll(); renderAdmin(); }
-            else alert('Заполните все поля');
+            if (name && phone && login && password) { 
+                workers.push({ id: generateId(), name, phone, login, password }); 
+                saveAll(); 
+                renderAdmin(); 
+            } else {
+                alert('Заполните все поля');
+            }
         });
-        document.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => { workers = workers.filter(w => w.id !== b.dataset.del); saveAll(); renderAdmin(); }));
-    }
-    else if (currentAdminTab === 'stats') {
-        const today = new Date(); today.setHours(0,0,0,0);
+        
+        document.querySelectorAll('[data-del]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                workers = workers.filter(w => w.id !== btn.dataset.del);
+                saveAll();
+                renderAdmin();
+            });
+        });
+        
+    } else if (currentAdminTab === 'stats') {
+        const today = new Date(); 
+        today.setHours(0,0,0,0);
         const todayOrders = orders.filter(o => o.createdAt >= today.getTime());
-        const todaySum = todayOrders.reduce((s,o) => s + o.total, 0);
+        const todaySum = todayOrders.reduce((s,o) => s + (o.total || 0), 0);
+        
         content.innerHTML = `
             <h2>📊 Статистика</h2>
             <div class="stats-grid">
@@ -239,41 +403,37 @@ function renderAdmin() {
             </div>
             <div class="stats-card full-width"><div class="stats-value">${todaySum} ₽</div><div class="stats-label">Выручка сегодня</div></div>
             <h3>👨‍🔧 По работникам</h3>
-            ${workers.map(w => { const wo = orders.filter(o => o.workerId === w.id && o.status === 'completed'); const earned = wo.reduce((s,o) => s + o.total, 0); return `<div class="worker-stats-card"><strong>${escapeHtml(w.name)}</strong><br>✅ ${wo.length} заказов<br>💰 ${earned} ₽</div>`; }).join('')}
+            ${workers.map(w => {
+                const wo = orders.filter(o => o.workerId === w.id && o.status === 'completed');
+                const earned = wo.reduce((s,o) => s + (o.total || 0), 0);
+                return `<div class="worker-stats-card"><strong>${escapeHtml(w.name)}</strong><br>✅ ${wo.length} заказов<br>💰 ${earned} ₽</div>`;
+            }).join('')}
         `;
     }
 }
 
-function renderOrderSection(title, ordersList) {
-    if (ordersList.length === 0) {
-        return `<div style="margin: 1rem 0; padding: 1rem; background: #f1f5f9; border-radius: 0.5rem; color: #64748b;">${title}: нет заказов</div>`;
+function renderOrdersList(ordersList) {
+    if (!ordersList || ordersList.length === 0) {
+        return '<div style="padding: 0.5rem; color: #888;">Нет заказов</div>';
     }
     
-    return `
-        <div style="margin: 1rem 0;">
-            <h3>${title}</h3>
-            ${ordersList.map(order => `
-                <div class="order-card" style="border-left: 4px solid ${getStatusColor(order.status)};">
-                    <div class="order-header">
-                        <strong>${escapeHtml(order.fio)}</strong>
-                        <span class="order-status status-${order.status}">${getStatusText(order.status)}</span>
-                    </div>
-                    <div>📞 ${escapeHtml(order.phone)}</div>
-                    <div>📍 ${escapeHtml(order.address || '—')}</div>
-                    <div>📅 ${order.desiredTime ? new Date(order.desiredTime).toLocaleString() : 'время не указано'}</div>
-                    <div class="order-problem">📝 ${escapeHtml(order.problem || '—')}</div>
-                    ${order.services && order.services.length > 0 ? `<div>🛠 Услуги: ${order.services.map(s => `${s.name} x${s.quantity}`).join(', ')}</div>` : ''}
-                    ${order.parts && order.parts.length > 0 ? `<div>🔩 Запчасти: ${order.parts.map(p => `${p.name} x${p.quantity}`).join(', ')}</div>` : ''}
-                    <div><strong>💰 Итого: ${order.total} ₽</strong></div>
-                    ${order.adminNote ? `<div class="order-problem" style="background:#e0f2fe;">📋 Заметка: ${escapeHtml(order.adminNote)}</div>` : ''}
-                    <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                        <button class="btn-sm" onclick="openOrderModal('${order.id}')">✏️ Обработать заказ</button>
-                        <button class="btn-sm" style="background:#ef4444;color:white;" onclick="deleteOrder('${order.id}')">🗑 Удалить</button>
-                    </div>
-                </div>
-            `).join('')}
+    return ordersList.map(order => `
+        <div class="order-card" style="border-left: 4px solid ${getStatusColor(order.status)}; margin-bottom: 0.5rem;">
+            <div class="order-header">
+                <strong>${escapeHtml(order.fio)}</strong>
+                <span class="order-status status-${order.status}">${getStatusText(order.status)}</span>
+            </div>
+            <div>📞 ${escapeHtml(order.phone)}</div>
+            <div>📍 ${escapeHtml(order.address || '—')}</div>
+            <div>📅 ${order.desiredTime ? new Date(order.desiredTime).toLocaleString() : '—'}</div>
+            ${order.problem ? `<div class="order-problem">📝 ${escapeHtml(order.problem)}</div>` : ''}
+            <div><strong>💰 ${order.total || 0} ₽</strong></div>
+            <div style="margin-top: 0.5rem;">
+                <button class="btn-sm" data-process="${order.id}">✏️ Обработать</button>
+                <button class="btn-sm" data-delete-order="${order.id}" style="background:#ef4444;color:white;">🗑 Удалить</button>
+            </div>
         </div>
-    `;
+    `).join('');
 }
 
 function getStatusColor(status) {
@@ -324,13 +484,17 @@ function openCreateOrderModal() {
         
         orders.unshift({
             id: generateId(),
-            fio, phone,
+            fio: fio,
+            phone: phone,
             address: document.getElementById('createAddress').value,
             desiredTime: document.getElementById('createTime').value,
             problem: document.getElementById('createProblem').value,
             status: 'new',
-            workerId: null, workerName: null,
-            services: [], parts: [], total: 0,
+            workerId: null,
+            workerName: null,
+            services: [],
+            parts: [],
+            total: 0,
             adminNote: '',
             createdAt: Date.now()
         });
@@ -341,7 +505,7 @@ function openCreateOrderModal() {
     });
 }
 
-// Модальное окно для обработки заказа
+// Модальное окно обработки заказа
 function openOrderModal(orderId) {
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
@@ -390,8 +554,8 @@ function openOrderModal(orderId) {
             </div>
             
             <div class="form-group">
-                <label>📝 Заметка (для себя или клиента)</label>
-                <textarea id="adminNote" rows="2" placeholder="Например: клиент согласен на ремонт, звонить после 18:00...">${escapeHtml(order.adminNote || '')}</textarea>
+                <label>📝 Заметка</label>
+                <textarea id="adminNote" rows="2" placeholder="Заметка...">${escapeHtml(order.adminNote || '')}</textarea>
             </div>
             
             <div class="form-group">
@@ -405,16 +569,15 @@ function openOrderModal(orderId) {
             <div style="display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;">
                 ${order.status === 'new' ? `<button class="btn-primary" id="calculateBtn">💰 Рассчитать стоимость</button>` : ''}
                 ${order.status === 'calculated' ? `<button class="btn-primary" id="agreeBtn">✅ Согласовать с клиентом</button>` : ''}
-                ${order.status === 'agreed' ? `<button class="btn-primary" id="assignBtn">🔧 Назначить мастера и отправить</button>` : ''}
+                ${order.status === 'agreed' ? `<button class="btn-primary" id="assignBtn">🔧 Назначить мастера</button>` : ''}
                 <button class="btn-sm" id="saveNoteBtn">💾 Сохранить заметку</button>
             </div>
             
             <div id="orderTotal" style="margin-top: 1rem; padding: 0.75rem; background: #eef2ff; border-radius: 0.5rem; text-align: center; font-weight: bold;">
-                💰 Общая стоимость: ${order.total} ₽
+                💰 Общая стоимость: ${order.total || 0} ₽
             </div>
         </div>
     `;
-    
     document.body.appendChild(modal);
     
     function updateServicesList() {
@@ -491,7 +654,7 @@ function openOrderModal(orderId) {
         const name = document.getElementById('partName').value.trim();
         const price = parseInt(document.getElementById('partPrice').value);
         const qty = parseInt(document.getElementById('partQty').value) || 1;
-        if (!name || isNaN(price)) { alert('Введите название и цену запчасти'); return; }
+        if (!name || isNaN(price)) { alert('Введите название и цену'); return; }
         
         order.parts = order.parts || [];
         order.parts.push({ name, price, quantity: qty });
@@ -510,10 +673,10 @@ function openOrderModal(orderId) {
     });
     
     document.getElementById('calculateBtn')?.addEventListener('click', () => {
-        if (order.total === 0) { alert('Добавьте услуги или запчасти для расчета'); return; }
+        if (order.total === 0) { alert('Добавьте услуги или запчасти'); return; }
         order.status = 'calculated';
         saveAll();
-        alert('✅ Стоимость рассчитана! Теперь можно согласовывать с клиентом.');
+        alert('✅ Стоимость рассчитана!');
         modal.remove();
         renderAdmin();
     });
@@ -521,7 +684,7 @@ function openOrderModal(orderId) {
     document.getElementById('agreeBtn')?.addEventListener('click', () => {
         order.status = 'agreed';
         saveAll();
-        alert('✅ Заказ согласован с клиентом! Теперь можно назначить мастера.');
+        alert('✅ Заказ согласован!');
         modal.remove();
         renderAdmin();
     });
@@ -534,7 +697,7 @@ function openOrderModal(orderId) {
         order.workerName = worker.name;
         order.status = 'assigned';
         saveAll();
-        alert(`✅ Мастер ${worker.name} назначен! Заказ отправлен ему.`);
+        alert(`✅ Мастер ${worker.name} назначен!`);
         modal.remove();
         renderAdmin();
     });
@@ -547,27 +710,14 @@ function openOrderModal(orderId) {
     updateTotal();
 }
 
-function attachModalHandlers() {
-    window.openOrderModal = openOrderModal;
-    window.deleteOrder = (orderId) => {
-        if (confirm('Удалить заказ?')) {
-            orders = orders.filter(o => o.id !== orderId);
-            saveAll();
-            renderAdmin();
-        }
-    };
-}
-
 // ==================== ЧАСТЬ МАСТЕРА ====================
 function renderWorker() {
-    // Проверка что currentUser существует
     if (!currentUser) {
         console.error('currentUser не определен');
         showLoginModal('worker');
         return;
     }
     
-    // Безопасное получение заказов мастера
     const myOrders = (orders || []).filter(o => o.workerId === currentUser.id && o.status !== 'completed');
     const completedOrders = (orders || []).filter(o => o.workerId === currentUser.id && o.status === 'completed');
     const completedCount = completedOrders.length;
@@ -577,12 +727,10 @@ function renderWorker() {
         <div class="app">
             <div class="header">
                 <div class="header-left">
-                    <button class="menu-btn" id="menuButton">☰</button>
                     <h1>🔧 ${escapeHtml(currentUser.name || 'Мастер')}</h1>
                 </div>
                 <button class="btn-sm" id="logoutBtn" style="background:#ef4444;color:white;">Выйти</button>
             </div>
-            ${drawerOverlayWorker()}
             <div class="content">
                 <div class="stats-card" style="margin-bottom: 1rem;">
                     <div class="stats-value">${completedCount}</div>
@@ -601,7 +749,7 @@ function renderWorker() {
                                 </div>
                                 <div>📞 ${escapeHtml(o.phone || '—')}</div>
                                 <div>📍 ${escapeHtml(o.address || '—')}</div>
-                                <div>📅 ${o.desiredTime ? new Date(o.desiredTime).toLocaleString() : 'время не указано'}</div>
+                                <div>📅 ${o.desiredTime ? new Date(o.desiredTime).toLocaleString() : '—'}</div>
                                 ${o.problem ? `<div class="order-problem">📝 ${escapeHtml(o.problem)}</div>` : ''}
                                 ${o.services && o.services.length > 0 ? `<div>🛠 ${o.services.map(s => `${s.name} x${s.quantity}`).join(', ')}</div>` : ''}
                                 <div><strong>💰 Сумма: ${o.total || 0} ₽</strong></div>
@@ -616,7 +764,6 @@ function renderWorker() {
         </div>
     `;
     
-    // Обработчики
     document.getElementById('logoutBtn')?.addEventListener('click', () => { 
         currentRole = 'user'; 
         currentUser = null; 
@@ -634,39 +781,91 @@ function renderWorker() {
             }
         });
     });
-    
-    // Меню для мастера
-    const menuBtn = document.getElementById('menuButton');
-    const overlay = document.getElementById('drawerOverlay');
-    const closeBtn = document.getElementById('closeDrawerBtn');
-    
-    if (menuBtn) menuBtn.onclick = () => toggleDrawer(true);
-    if (closeBtn) closeBtn.onclick = () => toggleDrawer(false);
-    if (overlay) overlay.onclick = (e) => { if (e.target === overlay) toggleDrawer(false); };
 }
 
-function drawerOverlayWorker() {
-    return `
-        <div class="drawer-overlay" id="drawerOverlay">
-            <div class="drawer">
-                <div class="drawer-header">📋 Меню мастера</div>
-                <ul class="drawer-nav">
-                    <li data-section="my-orders" class="active">📋 Мои заказы</li>
-                    <li data-section="my-stats">📊 Моя статистика</li>
-                </ul>
-                <div class="close-drawer" id="closeDrawerBtn">✖ Закрыть</div>
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
+}
+
+// ==================== АВТОРИЗАЦИЯ ====================
+function showLoginModal(role) {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width:350px;">
+            <div class="modal-header">
+                <h3>Вход в ${role === 'admin' ? 'Админ-панель' : 'Кабинет мастера'}</h3>
+                <button class="modal-close" id="closeModal">&times;</button>
             </div>
+            <div class="form-group"><label>Логин</label><input type="text" id="loginInput" placeholder="Логин"></div>
+            <div class="form-group"><label>Пароль</label><input type="password" id="passwordInput" placeholder="Пароль"></div>
+            <div id="loginError" style="color:red; font-size:0.8rem; margin-bottom:0.5rem; display:none;">Неверный логин или пароль</div>
+            <button class="btn-primary" id="submitLogin" style="width:100%;">Войти</button>
         </div>
     `;
+    document.body.appendChild(modal);
+    
+    const closeModal = () => modal.remove();
+    document.getElementById('closeModal')?.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    
+    document.getElementById('submitLogin')?.addEventListener('click', () => {
+        const login = document.getElementById('loginInput').value.trim();
+        const password = document.getElementById('passwordInput').value;
+        const errorDiv = document.getElementById('loginError');
+        
+        console.log('Попытка входа:', role, login);
+        console.log('Доступные работники:', workers);
+        
+        if (role === 'admin') {
+            if (login === ADMIN_LOGIN && password === ADMIN_PASSWORD) {
+                currentRole = 'admin';
+                currentUser = null;
+                closeModal();
+                render();
+            } else {
+                if (errorDiv) {
+                    errorDiv.style.display = 'block';
+                    errorDiv.textContent = 'Неверный логин или пароль админа';
+                } else {
+                    alert('Неверный логин или пароль');
+                }
+            }
+        } else if (role === 'worker') {
+            const worker = workers.find(w => w.login === login && w.password === password);
+            console.log('Найден работник:', worker);
+            if (worker) {
+                currentRole = 'worker';
+                currentUser = worker;
+                closeModal();
+                render();
+            } else {
+                if (errorDiv) {
+                    errorDiv.style.display = 'block';
+                    errorDiv.textContent = 'Неверный логин или пароль мастера';
+                } else {
+                    alert('Неверный логин или пароль');
+                }
+            }
+        }
+    });
 }
 
-function toggleDrawer(open) {
-    const overlay = document.getElementById('drawerOverlay');
-    if (overlay) {
-        if (open) overlay.classList.add('open');
-        else overlay.classList.remove('open');
+function checkHash() {
+    const hash = window.location.hash;
+    console.log('Hash:', hash);
+    if (hash === '#admin' && currentRole === 'user') {
+        showLoginModal('admin');
+    } else if (hash === '#worker' && currentRole === 'user') {
+        showLoginModal('worker');
     }
 }
 
-// Запуск
+window.addEventListener('hashchange', () => { 
+    if (currentRole === 'user') checkHash(); 
+});
+
+// ==================== ЗАПУСК ====================
+console.log('🚀 Запуск приложения...');
 loadFromSupabase();
