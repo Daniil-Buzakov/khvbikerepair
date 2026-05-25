@@ -95,10 +95,16 @@ function showAuthModalFunc(role) {
     authError = '';
     renderAuthModal();
 }
+
 function renderAuthModal() {
+    // Удаляем старый модал если есть
+    const oldModal = document.getElementById('orderModal');
+    if (oldModal) oldModal.remove();
+    
     const modal = document.createElement('div');
     modal.className = 'modal';
     modal.id = 'orderModal';
+    modal.style.display = 'flex';
     modal.innerHTML = `
         <div class="modal-content" style="max-width: 400px;">
             <div class="modal-header">
@@ -119,40 +125,51 @@ function renderAuthModal() {
     `;
     document.body.appendChild(modal);
     
-    document.getElementById('closeModalBtn')?.addEventListener('click', closeModal);
-    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    const closeBtn = document.getElementById('closeModalBtn');
+    if (closeBtn) {
+        closeBtn.onclick = (e) => {
+            e.preventDefault();
+            closeModal();
+        };
+    }
     
-    document.getElementById('authSubmitBtn')?.addEventListener('click', () => {
-        const login = document.getElementById('authLogin')?.value.trim();
-        const password = document.getElementById('authPassword')?.value;
-        
-        if (authTargetRole === ROLES.ADMIN) {
-            // Прямое сравнение с жестко заданными данными
-            if (login === ADMIN_LOGIN && password === ADMIN_PASSWORD) {
-                currentRole = ROLES.ADMIN;
-                currentUser = null;
-                currentAdminSection = 'orders';
-                currentSection = 'orders';
-                closeModal();
-                render();
-            } else {
-                authError = 'Неверный логин или пароль';
-                renderAuthModal();
+    modal.onclick = (e) => { 
+        if (e.target === modal) closeModal(); 
+    };
+    
+    const submitBtn = document.getElementById('authSubmitBtn');
+    if (submitBtn) {
+        submitBtn.onclick = () => {
+            const login = document.getElementById('authLogin')?.value.trim();
+            const password = document.getElementById('authPassword')?.value;
+            
+            if (authTargetRole === ROLES.ADMIN) {
+                if (login === ADMIN_LOGIN && password === ADMIN_PASSWORD) {
+                    currentRole = ROLES.ADMIN;
+                    currentUser = null;
+                    currentAdminSection = 'orders';
+                    currentSection = 'orders';
+                    closeModal();
+                    render();
+                } else {
+                    authError = 'Неверный логин или пароль';
+                    renderAuthModal();
+                }
+            } else if (authTargetRole === ROLES.WORKER) {
+                const worker = workers.find(w => w.login === login && w.password === password);
+                if (worker) {
+                    currentRole = ROLES.WORKER;
+                    currentUser = worker;
+                    currentSection = 'my-orders';
+                    closeModal();
+                    render();
+                } else {
+                    authError = 'Неверный логин или пароль';
+                    renderAuthModal();
+                }
             }
-        } else if (authTargetRole === ROLES.WORKER) {
-            const worker = workers.find(w => w.login === login && w.password === password);
-            if (worker) {
-                currentRole = ROLES.WORKER;
-                currentUser = worker;
-                currentSection = 'my-orders';
-                closeModal();
-                render();
-            } else {
-                authError = 'Неверный логин или пароль';
-                renderAuthModal();
-            }
-        }
-    });
+        };
+    }
 }
 
 function render() {
@@ -230,10 +247,13 @@ function renderUserPart() {
     
     appRoot.innerHTML = html;
     
-    document.getElementById('requestForm')?.addEventListener('submit', (e) => {
-        e.preventDefault();
-        createUserRequest();
-    });
+    const form = document.getElementById('requestForm');
+    if (form) {
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            createUserRequest();
+        });
+    }
 }
 
 function createUserRequest() {
@@ -432,7 +452,8 @@ function renderAdminPart() {
     
     if (currentAdminSection === 'orders') {
         attachFilterEvents();
-        document.getElementById('createOrderBtn')?.addEventListener('click', () => openAdminOrderModal());
+        const createBtn = document.getElementById('createOrderBtn');
+        if (createBtn) createBtn.onclick = () => openAdminOrderModal();
         
         const ordersContainer = document.getElementById('ordersList');
         if (ordersContainer) {
@@ -470,17 +491,20 @@ function renderAdminPart() {
     }
     
     if (currentAdminSection === 'price') {
-        document.getElementById('addPriceBtn')?.addEventListener('click', () => {
-            const name = document.getElementById('newPriceName')?.value.trim();
-            const cost = parseInt(document.getElementById('newPriceCost')?.value);
-            if (!name || isNaN(cost) || cost <= 0) {
-                alert('Введите корректное название и цену');
-                return;
-            }
-            priceList.push({ id: generateId(), name, price: cost });
-            savePrices();
-            render();
-        });
+        const addPriceBtn = document.getElementById('addPriceBtn');
+        if (addPriceBtn) {
+            addPriceBtn.onclick = () => {
+                const name = document.getElementById('newPriceName')?.value.trim();
+                const cost = parseInt(document.getElementById('newPriceCost')?.value);
+                if (!name || isNaN(cost) || cost <= 0) {
+                    alert('Введите корректное название и цену');
+                    return;
+                }
+                priceList.push({ id: generateId(), name, price: cost });
+                savePrices();
+                render();
+            };
+        }
         
         const priceContainer = document.getElementById('priceListContainer');
         if (priceContainer) {
@@ -511,38 +535,44 @@ function renderAdminPart() {
             };
         });
         
-        document.getElementById('applyCustom')?.addEventListener('click', () => {
-            customStart = document.getElementById('customStart')?.value || '';
-            customEnd = document.getElementById('customEnd')?.value || '';
-            render();
-        });
+        const applyBtn = document.getElementById('applyCustom');
+        if (applyBtn) {
+            applyBtn.onclick = () => {
+                customStart = document.getElementById('customStart')?.value || '';
+                customEnd = document.getElementById('customEnd')?.value || '';
+                render();
+            };
+        }
     }
     
     if (currentAdminSection === 'workers') {
-        document.getElementById('addWorkerBtn')?.addEventListener('click', () => {
-            const name = document.getElementById('newWorkerName')?.value.trim();
-            const phone = document.getElementById('newWorkerPhone')?.value.trim();
-            const login = document.getElementById('newWorkerLogin')?.value.trim();
-            const password = document.getElementById('newWorkerPassword')?.value;
-            
-            if (!name || !phone || !login || !password) {
-                alert('Заполните все поля');
-                return;
-            }
-            
-            const newId = 'w' + (workers.length + 1);
-            workers.push({
-                id: newId,
-                name,
-                phone,
-                login,
-                password,
-                ordersCount: 0,
-                totalEarned: 0
-            });
-            saveWorkers();
-            render();
-        });
+        const addWorkerBtn = document.getElementById('addWorkerBtn');
+        if (addWorkerBtn) {
+            addWorkerBtn.onclick = () => {
+                const name = document.getElementById('newWorkerName')?.value.trim();
+                const phone = document.getElementById('newWorkerPhone')?.value.trim();
+                const login = document.getElementById('newWorkerLogin')?.value.trim();
+                const password = document.getElementById('newWorkerPassword')?.value;
+                
+                if (!name || !phone || !login || !password) {
+                    alert('Заполните все поля');
+                    return;
+                }
+                
+                const newId = 'w' + (workers.length + 1);
+                workers.push({
+                    id: newId,
+                    name,
+                    phone,
+                    login,
+                    password,
+                    ordersCount: 0,
+                    totalEarned: 0
+                });
+                saveWorkers();
+                render();
+            };
+        }
         
         document.querySelectorAll('[data-delworker]')?.forEach(btn => {
             btn.onclick = () => {
@@ -556,7 +586,8 @@ function renderAdminPart() {
         });
     }
     
-    document.getElementById('logoutBtn')?.addEventListener('click', logout);
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) logoutBtn.onclick = logout;
 }
 
 function openAdminOrderModal(editOrder = null) {
@@ -567,6 +598,7 @@ function openAdminOrderModal(editOrder = null) {
     const modal = document.createElement('div');
     modal.className = 'modal';
     modal.id = 'orderModal';
+    modal.style.display = 'flex';
     modal.innerHTML = `
         <div class="modal-content">
             <div class="modal-header">
@@ -661,64 +693,75 @@ function openAdminOrderModal(editOrder = null) {
     renderServiceForm();
     renderPartForm();
     
-    document.getElementById('addServiceBtn')?.addEventListener('click', () => {
-        serviceItems.push({ serviceId: '', quantity: 1 });
-        renderServiceForm();
-    });
-    document.getElementById('addPartBtn')?.addEventListener('click', () => {
-        partItems.push({ name: '', price: 0, quantity: 1 });
-        renderPartForm();
-    });
-    
-    document.getElementById('saveOrderBtn')?.addEventListener('click', () => {
-        const fio = document.getElementById('orderFio')?.value.trim();
-        if (!fio) { alert('Введите ФИО'); return; }
-        
-        const services = serviceItems.filter(s => s.serviceId).map(s => {
-            const svc = priceList.find(p => p.id === s.serviceId);
-            return { id: s.serviceId, name: svc?.name || '', price: svc?.price || 0, quantity: s.quantity };
-        });
-        const parts = partItems.filter(p => p.name.trim() && p.price > 0);
-        const total = [...services.map(s => s.price * s.quantity), ...parts.map(p => p.price * p.quantity)].reduce((a,b)=>a+b,0);
-        
-        const orderData = {
-            fio,
-            phone: document.getElementById('orderPhone')?.value || '',
-            address: document.getElementById('orderAddress')?.value || '',
-            desiredTime: document.getElementById('orderTime')?.value || '',
-            problem: document.getElementById('orderProblem')?.value || '',
-            status: document.getElementById('orderStatus')?.value || 'pending',
-            workerId: document.getElementById('orderWorker')?.value || null,
-            workerName: workers.find(w => w.id === document.getElementById('orderWorker')?.value)?.name || null,
-            services,
-            parts,
-            total
+    const addServiceBtn = document.getElementById('addServiceBtn');
+    if (addServiceBtn) {
+        addServiceBtn.onclick = () => {
+            serviceItems.push({ serviceId: '', quantity: 1 });
+            renderServiceForm();
         };
-        
-        if (isEdit) {
-            const index = orders.findIndex(o => o.id === editOrder.id);
-            if (index !== -1) orders[index] = { ...orders[index], ...orderData };
-        } else {
-            orders.unshift({ id: generateId(), ...orderData, createdAt: Date.now() });
-        }
-        saveOrders();
-        closeModal();
-        render();
-    });
+    }
     
-    document.getElementById('closeModalBtn')?.addEventListener('click', closeModal);
-    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    const addPartBtn = document.getElementById('addPartBtn');
+    if (addPartBtn) {
+        addPartBtn.onclick = () => {
+            partItems.push({ name: '', price: 0, quantity: 1 });
+            renderPartForm();
+        };
+    }
+    
+    const saveBtn = document.getElementById('saveOrderBtn');
+    if (saveBtn) {
+        saveBtn.onclick = () => {
+            const fio = document.getElementById('orderFio')?.value.trim();
+            if (!fio) { alert('Введите ФИО'); return; }
+            
+            const services = serviceItems.filter(s => s.serviceId).map(s => {
+                const svc = priceList.find(p => p.id === s.serviceId);
+                return { id: s.serviceId, name: svc?.name || '', price: svc?.price || 0, quantity: s.quantity };
+            });
+            const parts = partItems.filter(p => p.name.trim() && p.price > 0);
+            const total = [...services.map(s => s.price * s.quantity), ...parts.map(p => p.price * p.quantity)].reduce((a,b)=>a+b,0);
+            
+            const orderData = {
+                fio,
+                phone: document.getElementById('orderPhone')?.value || '',
+                address: document.getElementById('orderAddress')?.value || '',
+                desiredTime: document.getElementById('orderTime')?.value || '',
+                problem: document.getElementById('orderProblem')?.value || '',
+                status: document.getElementById('orderStatus')?.value || 'pending',
+                workerId: document.getElementById('orderWorker')?.value || null,
+                workerName: workers.find(w => w.id === document.getElementById('orderWorker')?.value)?.name || null,
+                services,
+                parts,
+                total
+            };
+            
+            if (isEdit) {
+                const index = orders.findIndex(o => o.id === editOrder.id);
+                if (index !== -1) orders[index] = { ...orders[index], ...orderData };
+            } else {
+                orders.unshift({ id: generateId(), ...orderData, createdAt: Date.now() });
+            }
+            saveOrders();
+            closeModal();
+            render();
+        };
+    }
+    
+    const closeBtn = document.getElementById('closeModalBtn');
+    if (closeBtn) closeBtn.onclick = closeModal;
+    modal.onclick = (e) => { if (e.target === modal) closeModal(); };
 }
 
 function attachAdminOrderEvents() {
     document.querySelectorAll('[data-edit]').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.onclick = () => {
             const order = orders.find(o => o.id === btn.dataset.edit);
             if (order) openAdminOrderModal(order);
-        });
+        };
     });
     document.querySelectorAll('[data-assign]').forEach(select => {
-        select.addEventListener('change', (e) => {
+        select.onchange = (e) => {
             const order = orders.find(o => o.id === select.dataset.assign);
             if (order) {
                 const workerId = e.target.value;
@@ -728,16 +771,16 @@ function attachAdminOrderEvents() {
                 saveOrders();
                 render();
             }
-        });
+        };
     });
     document.querySelectorAll('[data-delete]').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.onclick = () => {
             if (confirm('Удалить заказ?')) {
                 orders = orders.filter(o => o.id !== btn.dataset.delete);
                 saveOrders();
                 render();
             }
-        });
+        };
     });
 }
 
@@ -782,7 +825,8 @@ function renderWorkerPart() {
     attachDrawerEvents();
     attachFilterEvents();
     
-    document.getElementById('logoutBtn')?.addEventListener('click', logout);
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) logoutBtn.onclick = logout;
     
     const ordersContainer = document.getElementById('ordersList');
     if (ordersContainer) {
@@ -810,25 +854,25 @@ function renderWorkerPart() {
             `).join('');
             
             document.querySelectorAll('[data-complete]').forEach(btn => {
-                btn.addEventListener('click', () => {
+                btn.onclick = () => {
                     const order = orders.find(o => o.id === btn.dataset.complete);
                     if (order && confirm('Завершить заказ?')) {
                         order.status = 'completed';
                         saveOrders();
                         render();
                     }
-                });
+                };
             });
             
             document.querySelectorAll('[data-start]').forEach(btn => {
-                btn.addEventListener('click', () => {
+                btn.onclick = () => {
                     const order = orders.find(o => o.id === btn.dataset.start);
                     if (order && order.status === 'pending') {
                         order.status = 'in-progress';
                         saveOrders();
                         render();
                     }
-                });
+                };
             });
         }
     }
@@ -910,11 +954,22 @@ function escapeHtml(str) {
 function checkUrlForAuth() {
     const hash = window.location.hash;
     if (hash === '#admin') {
-        showAuthModalFunc(ROLES.ADMIN);
+        setTimeout(() => {
+            showAuthModalFunc(ROLES.ADMIN);
+        }, 100);
     } else if (hash === '#worker') {
-        showAuthModalFunc(ROLES.WORKER);
+        setTimeout(() => {
+            showAuthModalFunc(ROLES.WORKER);
+        }, 100);
     }
 }
+
+// Следим за изменениями hash
+window.addEventListener('hashchange', () => {
+    if (currentRole === ROLES.USER) {
+        checkUrlForAuth();
+    }
+});
 
 // Инициализация
 loadData();
