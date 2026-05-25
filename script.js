@@ -11,9 +11,10 @@ let orders = [];
 let priceList = [];
 let workers = [];
 let currentUser = null;
+let currentAdminSection = 'orders'; // Для отслеживания раздела в админке
 
-// Данные для авторизации (в реальном проекте должны быть на сервере)
-const ADMIN_CREDENTIALS = { login: 'admin', password: 'admin123' };
+// Данные для авторизации
+const ADMIN_CREDENTIALS = { login: 'DaniilBuzakov', password: '123654123Aa@' };
 const WORKER_CREDENTIALS = {
     'w1': { login: 'alexey', password: '123', name: 'Алексей' },
     'w2': { login: 'dmitry', password: '123', name: 'Дмитрий' },
@@ -66,22 +67,20 @@ let authTargetRole = null;
 
 const appRoot = document.getElementById('app');
 
-// Проверяем URL для автоматического входа
-function checkUrlForAuth() {
-    const hash = window.location.hash;
-    if (hash === '#admin') {
-        showAuthModalFunc(ROLES.ADMIN);
-    } else if (hash === '#worker') {
-        showAuthModalFunc(ROLES.WORKER);
-    }
-}
-
 function toggleDrawer(open) { drawerOpen = open; render(); }
-function setSection(section) { currentSection = section; toggleDrawer(false); render(); }
+function setSection(section) { 
+    if (currentRole === ROLES.ADMIN) {
+        currentAdminSection = section;
+    }
+    currentSection = section; 
+    toggleDrawer(false); 
+    render(); 
+}
 function logout() { 
     currentRole = ROLES.USER; 
     currentUser = null;
     currentSection = 'hero';
+    currentAdminSection = 'orders';
     window.location.hash = '';
     render(); 
 }
@@ -135,6 +134,7 @@ function renderAuthModal() {
             if (login === ADMIN_CREDENTIALS.login && password === ADMIN_CREDENTIALS.password) {
                 currentRole = ROLES.ADMIN;
                 currentUser = null;
+                currentAdminSection = 'orders';
                 currentSection = 'orders';
                 closeModal();
                 render();
@@ -168,17 +168,15 @@ function render() {
     }
 }
 
-// ==================== ПОЛЬЗОВАТЕЛЬСКАЯ ЧАСТЬ (без кнопок входа) ====================
+// ==================== ПОЛЬЗОВАТЕЛЬСКАЯ ЧАСТЬ ====================
 function renderUserPart() {
     let html = `
         <div class="app">
             <div class="header">
                 <div class="header-left">
-                    <button class="menu-btn" id="menuButton">☰</button>
                     <h1><span class="logo-icon">🚲</span> KHV Bike Repair</h1>
                 </div>
             </div>
-            ${drawerOverlay()}
             <div class="content">
                 <div class="hero">
                     <h1>🚲 Ремонт велосипедов с выездом на дом</h1>
@@ -234,7 +232,6 @@ function renderUserPart() {
     `;
     
     appRoot.innerHTML = html;
-    attachDrawerEvents();
     
     document.getElementById('requestForm')?.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -283,6 +280,28 @@ function renderAdminPart() {
     
     filteredOrders.sort((a,b) => b.createdAt - a.createdAt);
     
+    let contentHtml = '';
+    
+    // Рендерим контент в зависимости от выбранного раздела
+    if (currentAdminSection === 'orders') {
+        contentHtml = `
+            <div class="filter-tabs">
+                <button class="filter-btn ${currentFilter === 'all' ? 'active' : ''}" data-filter="all">Все</button>
+                <button class="filter-btn ${currentFilter === 'pending' ? 'active' : ''}" data-filter="pending">Новые</button>
+                <button class="filter-btn ${currentFilter === 'in-progress' ? 'active' : ''}" data-filter="in-progress">В работе</button>
+                <button class="filter-btn ${currentFilter === 'completed' ? 'active' : ''}" data-filter="completed">Завершённые</button>
+            </div>
+            <button class="btn btn-primary" id="createOrderBtn" style="margin-bottom: 1rem;">➕ Создать заказ вручную</button>
+            <div id="ordersList"></div>
+        `;
+    } else if (currentAdminSection === 'price') {
+        contentHtml = renderPriceContent();
+    } else if (currentAdminSection === 'stats') {
+        contentHtml = renderStatsContent();
+    } else if (currentAdminSection === 'workers') {
+        contentHtml = renderWorkersContent();
+    }
+    
     let html = `
         <div class="app">
             <div class="header">
@@ -294,58 +313,179 @@ function renderAdminPart() {
             </div>
             ${drawerOverlay()}
             <div class="content">
-                <div class="filter-tabs">
-                    <button class="filter-btn ${currentFilter === 'all' ? 'active' : ''}" data-filter="all">Все</button>
-                    <button class="filter-btn ${currentFilter === 'pending' ? 'active' : ''}" data-filter="pending">Новые</button>
-                    <button class="filter-btn ${currentFilter === 'in-progress' ? 'active' : ''}" data-filter="in-progress">В работе</button>
-                    <button class="filter-btn ${currentFilter === 'completed' ? 'active' : ''}" data-filter="completed">Завершённые</button>
-                </div>
-                <button class="btn btn-primary" id="createOrderBtn" style="margin-bottom: 1rem;">➕ Создать заказ вручную</button>
-                <div id="ordersList"></div>
+                ${contentHtml}
             </div>
         </div>
     `;
     
     appRoot.innerHTML = html;
     attachDrawerEvents();
-    attachFilterEvents();
     
-    document.getElementById('logoutBtn')?.addEventListener('click', logout);
-    document.getElementById('createOrderBtn')?.addEventListener('click', () => openAdminOrderModal());
-    
-    const ordersContainer = document.getElementById('ordersList');
-    if (ordersContainer) {
-        if (filteredOrders.length === 0) {
-            ordersContainer.innerHTML = '<div style="text-align:center; padding:2rem;">Нет заказов</div>';
-        } else {
-            ordersContainer.innerHTML = filteredOrders.map(order => `
-                <div class="order-card ${order.status}">
-                    <div class="order-header">
-                        <span class="order-customer">${escapeHtml(order.fio)}</span>
-                        <span class="order-status status-${order.status}">${getStatusText(order.status)}</span>
+    if (currentAdminSection === 'orders') {
+        attachFilterEvents();
+        document.getElementById('createOrderBtn')?.addEventListener('click', () => openAdminOrderModal());
+        
+        const ordersContainer = document.getElementById('ordersList');
+        if (ordersContainer) {
+            if (filteredOrders.length === 0) {
+                ordersContainer.innerHTML = '<div style="text-align:center; padding:2rem;">Нет заказов</div>';
+            } else {
+                ordersContainer.innerHTML = filteredOrders.map(order => `
+                    <div class="order-card ${order.status}">
+                        <div class="order-header">
+                            <span class="order-customer">${escapeHtml(order.fio)}</span>
+                            <span class="order-status status-${order.status}">${getStatusText(order.status)}</span>
+                        </div>
+                        <div class="order-info">
+                            <span>📞 ${escapeHtml(order.phone)}</span>
+                            <span>📍 ${escapeHtml(order.address)}</span>
+                            <span>⏱ ${order.desiredTime ? new Date(order.desiredTime).toLocaleString() : 'не указано'}</span>
+                            <span>👨‍🔧 ${order.workerName || 'Не назначен'}</span>
+                        </div>
+                        ${order.problem ? `<div class="order-problem">📝 Проблема: ${escapeHtml(order.problem)}</div>` : ''}
+                        <div class="order-total">💰 Сумма: ${order.total} ₽</div>
+                        <div class="order-actions">
+                            <button class="btn-sm" data-edit="${order.id}">✏️ Редактировать</button>
+                            <select class="btn-sm" data-assign="${order.id}">
+                                <option value="">Назначить мастера</option>
+                                ${workers.map(w => `<option value="${w.id}" ${order.workerId === w.id ? 'selected' : ''}>${escapeHtml(w.name)}</option>`).join('')}
+                            </select>
+                            <button class="btn-sm btn-danger" data-delete="${order.id}">🗑 Удалить</button>
+                        </div>
                     </div>
-                    <div class="order-info">
-                        <span>📞 ${escapeHtml(order.phone)}</span>
-                        <span>📍 ${escapeHtml(order.address)}</span>
-                        <span>⏱ ${order.desiredTime ? new Date(order.desiredTime).toLocaleString() : 'не указано'}</span>
-                        <span>👨‍🔧 ${order.workerName || 'Не назначен'}</span>
-                    </div>
-                    ${order.problem ? `<div class="order-problem">📝 Проблема: ${escapeHtml(order.problem)}</div>` : ''}
-                    <div class="order-total">💰 Сумма: ${order.total} ₽</div>
-                    <div class="order-actions">
-                        <button class="btn-sm" data-edit="${order.id}">✏️ Редактировать</button>
-                        <select class="btn-sm" data-assign="${order.id}">
-                            <option value="">Назначить мастера</option>
-                            ${workers.map(w => `<option value="${w.id}" ${order.workerId === w.id ? 'selected' : ''}>${escapeHtml(w.name)}</option>`).join('')}
-                        </select>
-                        <button class="btn-sm btn-danger" data-delete="${order.id}">🗑 Удалить</button>
-                    </div>
-                </div>
-            `).join('');
-            
-            attachAdminOrderEvents();
+                `).join('');
+                
+                attachAdminOrderEvents();
+            }
         }
     }
+    
+    document.getElementById('logoutBtn')?.addEventListener('click', logout);
+}
+
+function renderPriceContent() {
+    return `
+        <h2>💰 Прайс-лист</h2>
+        <div class="form-card">
+            <div class="form-group">
+                <label>Новая услуга</label>
+                <input id="newPriceName" placeholder="Название">
+            </div>
+            <div class="form-group">
+                <label>Стоимость (₽)</label>
+                <input id="newPriceCost" type="number" placeholder="500">
+            </div>
+            <button class="btn-primary" id="addPriceBtn">Добавить услугу</button>
+        </div>
+        <div id="priceListContainer"></div>
+    `;
+}
+
+function renderStatsContent() {
+    let now = new Date();
+    let startDate, endDate = new Date();
+    if (statsMode === 'today') { 
+        startDate = new Date(); startDate.setHours(0,0,0,0); 
+        endDate = new Date(); endDate.setHours(23,59,59,999); 
+    } else if (statsMode === 'week') { 
+        let day = now.getDay();
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+        startDate.setHours(0,0,0,0);
+        endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + 6);
+        endDate.setHours(23,59,59,999);
+    } else if (statsMode === 'month') { 
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    } else if (statsMode === 'custom' && customStart && customEnd) { 
+        startDate = new Date(customStart);
+        endDate = new Date(customEnd);
+        endDate.setHours(23,59,59,999);
+    }
+    
+    let filtered = orders.filter(o => {
+        if (!startDate || !endDate) return false;
+        let createdDate = new Date(o.createdAt);
+        return createdDate >= startDate && createdDate <= endDate;
+    });
+    
+    let totalSum = filtered.reduce((sum, o) => {
+        const servicesSum = o.services.reduce((sSum, service) => sSum + (service.price * service.quantity), 0);
+        return sum + servicesSum;
+    }, 0);
+    
+    let completed = filtered.filter(o => o.status === 'completed').length;
+    
+    let workerStats = workers.map(worker => {
+        const workerOrders = orders.filter(o => o.workerId === worker.id && o.status === 'completed');
+        const earned = workerOrders.reduce((sum, o) => sum + (o.services.reduce((s, svc) => s + svc.price * svc.quantity, 0) || 0), 0);
+        return { ...worker, ordersCount: workerOrders.length, earned };
+    });
+    
+    return `
+        <h2>📊 Статистика</h2>
+        <div class="stats-period">
+            <button class="stats-btn ${statsMode === 'today' ? 'active' : ''}" data-mode="today">Сегодня</button>
+            <button class="stats-btn ${statsMode === 'week' ? 'active' : ''}" data-mode="week">Неделя</button>
+            <button class="stats-btn ${statsMode === 'month' ? 'active' : ''}" data-mode="month">Месяц</button>
+            <button class="stats-btn ${statsMode === 'custom' ? 'active' : ''}" data-mode="custom">Свои даты</button>
+        </div>
+        ${statsMode === 'custom' ? `
+            <div class="date-range">
+                <div><label>С</label><input type="date" id="customStart" value="${customStart}"></div>
+                <div><label>По</label><input type="date" id="customEnd" value="${customEnd}"></div>
+                <button id="applyCustom" class="btn-primary">Применить</button>
+            </div>
+        ` : ''}
+        <div class="stats-summary">
+            💰 Сумма заказов (только услуги): ${totalSum} ₽<br>
+            📦 Кол-во заказов: ${filtered.length} (из них завершено: ${completed})
+        </div>
+        <h3 style="margin-top: 2rem;">📊 Статистика по работникам</h3>
+        ${workerStats.map(w => `
+            <div class="stats-worker">
+                <strong>${escapeHtml(w.name)}</strong><br>
+                ✅ Завершённых заказов: ${w.ordersCount}<br>
+                💰 Заработано: ${w.earned} ₽
+            </div>
+        `).join('')}
+    `;
+}
+
+function renderWorkersContent() {
+    return `
+        <h2>👨‍🔧 Работники</h2>
+        <div class="form-card">
+            <div class="form-group">
+                <label>Имя мастера</label>
+                <input id="newWorkerName" placeholder="Имя">
+            </div>
+            <div class="form-group">
+                <label>Телефон</label>
+                <input id="newWorkerPhone" placeholder="+7 XXX XXX-XX-XX">
+            </div>
+            <div class="form-group">
+                <label>Логин</label>
+                <input id="newWorkerLogin" placeholder="Логин для входа">
+            </div>
+            <div class="form-group">
+                <label>Пароль</label>
+                <input id="newWorkerPassword" type="password" placeholder="Пароль">
+            </div>
+            <button class="btn-primary" id="addWorkerBtn">Добавить мастера</button>
+        </div>
+        <div id="workersList">
+            ${workers.map(worker => `
+                <div class="worker-card">
+                    <strong>${escapeHtml(worker.name)}</strong><br>
+                    📞 ${escapeHtml(worker.phone)}<br>
+                    🔑 Логин: ${escapeHtml(worker.login)}
+                    <button class="btn-sm btn-danger" data-delworker="${worker.id}" style="margin-top: 0.5rem;">Удалить</button>
+                </div>
+            `).join('')}
+        </div>
+    `;
 }
 
 function openAdminOrderModal(editOrder = null) {
@@ -637,15 +777,11 @@ function drawerOverlay() {
             <div class="drawer">
                 <div class="drawer-header">📋 Меню</div>
                 <ul class="drawer-nav">
-                    ${currentRole === ROLES.USER ? `
-                        <li data-section="hero" class="${currentSection === 'hero' ? 'active' : ''}">🏠 Главная</li>
-                        <li data-section="request" class="${currentSection === 'request' ? 'active' : ''}">📝 Оставить заявку</li>
-                    ` : ''}
                     ${currentRole === ROLES.ADMIN ? `
-                        <li data-section="orders" class="${currentSection === 'orders' ? 'active' : ''}">📋 Заказы</li>
-                        <li data-section="price" class="${currentSection === 'price' ? 'active' : ''}">💰 Прайс-лист</li>
-                        <li data-section="stats" class="${currentSection === 'stats' ? 'active' : ''}">📊 Статистика</li>
-                        <li data-section="workers" class="${currentSection === 'workers' ? 'active' : ''}">👨‍🔧 Работники</li>
+                        <li data-section="orders" class="${currentAdminSection === 'orders' ? 'active' : ''}">📋 Заказы</li>
+                        <li data-section="price" class="${currentAdminSection === 'price' ? 'active' : ''}">💰 Прайс-лист</li>
+                        <li data-section="stats" class="${currentAdminSection === 'stats' ? 'active' : ''}">📊 Статистика</li>
+                        <li data-section="workers" class="${currentAdminSection === 'workers' ? 'active' : ''}">👨‍🔧 Работники</li>
                     ` : ''}
                     ${currentRole === ROLES.WORKER ? `
                         <li data-section="my-orders" class="${currentSection === 'my-orders' ? 'active' : ''}">📋 Мои заказы</li>
@@ -671,8 +807,98 @@ function attachDrawerEvents() {
         li.onclick = () => {
             const section = li.dataset.section;
             if (section) setSection(section);
+            toggleDrawer(false);
         };
     });
+    
+    // Обработчики для статистики и прайса в админке
+    if (currentRole === ROLES.ADMIN && currentAdminSection === 'stats') {
+        document.querySelectorAll('.stats-btn')?.forEach(btn => {
+            btn.onclick = () => {
+                statsMode = btn.dataset.mode;
+                render();
+            };
+        });
+        
+        document.getElementById('applyCustom')?.addEventListener('click', () => {
+            customStart = document.getElementById('customStart')?.value || '';
+            customEnd = document.getElementById('customEnd')?.value || '';
+            render();
+        });
+    }
+    
+    if (currentRole === ROLES.ADMIN && currentAdminSection === 'price') {
+        document.getElementById('addPriceBtn')?.addEventListener('click', () => {
+            const name = document.getElementById('newPriceName')?.value.trim();
+            const cost = parseInt(document.getElementById('newPriceCost')?.value);
+            if (!name || isNaN(cost) || cost <= 0) {
+                alert('Введите корректное название и цену');
+                return;
+            }
+            priceList.push({ id: generateId(), name, price: cost });
+            savePrices();
+            render();
+        });
+        
+        const priceContainer = document.getElementById('priceListContainer');
+        if (priceContainer) {
+            priceContainer.innerHTML = priceList.map(p => `
+                <div class="price-item">
+                    <span><strong>${escapeHtml(p.name)}</strong> — ${p.price} ₽</span>
+                    <div class="price-actions">
+                        <button data-delprice="${p.id}" class="btn-sm">Удалить</button>
+                    </div>
+                </div>
+            `).join('');
+            
+            document.querySelectorAll('[data-delprice]').forEach(btn => {
+                btn.onclick = () => {
+                    priceList = priceList.filter(p => p.id !== btn.dataset.delprice);
+                    savePrices();
+                    render();
+                };
+            });
+        }
+    }
+    
+    if (currentRole === ROLES.ADMIN && currentAdminSection === 'workers') {
+        document.getElementById('addWorkerBtn')?.addEventListener('click', () => {
+            const name = document.getElementById('newWorkerName')?.value.trim();
+            const phone = document.getElementById('newWorkerPhone')?.value.trim();
+            const login = document.getElementById('newWorkerLogin')?.value.trim();
+            const password = document.getElementById('newWorkerPassword')?.value;
+            
+            if (!name || !phone || !login || !password) {
+                alert('Заполните все поля');
+                return;
+            }
+            
+            const newId = 'w' + (workers.length + 1);
+            workers.push({
+                id: newId,
+                name,
+                phone,
+                login,
+                ordersCount: 0,
+                totalEarned: 0
+            });
+            WORKER_CREDENTIALS[newId] = { login, password, name };
+            saveWorkers();
+            render();
+        });
+        
+        document.querySelectorAll('[data-delworker]')?.forEach(btn => {
+            btn.onclick = () => {
+                if (confirm('Удалить мастера?')) {
+                    const id = btn.dataset.delworker;
+                    workers = workers.filter(w => w.id !== id);
+                    delete WORKER_CREDENTIALS[id];
+                    saveWorkers();
+                    render();
+                }
+            };
+        });
+    }
 }
 
 function attachFilterEvents() {
