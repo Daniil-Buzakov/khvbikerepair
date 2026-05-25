@@ -1,13 +1,30 @@
 // ==================== SUPABASE КОНФИГУРАЦИЯ ====================
+// ВАШИ ДАННЫЕ ИЗ SUPABASE
 const SUPABASE_URL = 'https://sjmubbiqceluomzbwwzw.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_bqoiJCZkj7A_32LW49zfUg_xD8tS29A'; // Вставьте ваш ПОЛНЫЙ ключ
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqbXVjYmlxY2VsdW9temJ3d3p3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzUwNjQwMDAsImV4cCI6MjA1MDY0MDAwMH0'; // ВСТАВЬТЕ ВАШ ПОЛНЫЙ КЛЮЧ!
 
-// Создаем клиент Supabase
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Проверяем, загрузилась ли библиотека Supabase
+if (typeof supabase === 'undefined' && typeof window.supabase !== 'undefined') {
+    var supabaseLib = window.supabase;
+} else if (typeof supabase !== 'undefined') {
+    var supabaseLib = supabase;
+} else {
+    console.error('❌ Supabase библиотека не загружена! Проверьте интернет и index.html');
+    var supabaseLib = null;
+}
 
-// --- Проверка подключения ---
-console.log('Supabase URL:', SUPABASE_URL);
-console.log('Supabase Key:', SUPABASE_KEY ? 'Есть (не показываем)' : 'НЕТ!');
+// Создаем клиент
+let supabaseClient = null;
+if (supabaseLib) {
+    try {
+        supabaseClient = supabaseLib.createClient(SUPABASE_URL, SUPABASE_KEY);
+        console.log('✅ Supabase клиент создан!');
+    } catch (e) {
+        console.error('❌ Ошибка создания клиента:', e);
+    }
+} else {
+    console.error('❌ Не удалось создать Supabase клиент');
+}
 
 // --- Роли пользователей ---
 const ROLES = {
@@ -22,107 +39,16 @@ let orders = [];
 let priceList = [];
 let workers = [];
 let currentUser = null;
-let currentAdminSection = 'orders';
+let drawerOpen = false;
+let showAuthModal = false;
+let authError = '';
+let authTargetRole = null;
 
-// Данные для авторизации
+// Данные для авторизации админа
 const ADMIN_LOGIN = 'DaniilBuzakov';
 const ADMIN_PASSWORD = '123654123Aa@';
 
-// Функции загрузки из Supabase
-async function loadOrdersFromSupabase() {
-    try {
-        const { data, error } = await supabase.from('orders').select('*');
-        if (error) throw error;
-        if (data) orders = data;
-        console.log('✅ Заказы загружены из Supabase:', orders.length);
-    } catch (err) {
-        console.error('❌ Ошибка загрузки заказов:', err);
-    }
-}
-
-async function loadPriceListFromSupabase() {
-    try {
-        const { data, error } = await supabase.from('price_list').select('*');
-        if (error) throw error;
-        if (data) priceList = data;
-        console.log('✅ Прайс загружен из Supabase:', priceList.length);
-    } catch (err) {
-        console.error('❌ Ошибка загрузки прайса:', err);
-    }
-}
-
-async function loadWorkersFromSupabase() {
-    try {
-        const { data, error } = await supabase.from('workers').select('*');
-        if (error) throw error;
-        if (data) workers = data;
-        console.log('✅ Работники загружены из Supabase:', workers.length);
-    } catch (err) {
-        console.error('❌ Ошибка загрузки работников:', err);
-    }
-}
-
-// Функции сохранения в Supabase
-async function saveOrdersToSupabase() {
-    try {
-        const { error } = await supabase.from('orders').upsert(orders, { onConflict: 'id' });
-        if (error) throw error;
-        console.log('✅ Заказы сохранены в Supabase');
-    } catch (err) {
-        console.error('❌ Ошибка сохранения заказов:', err);
-    }
-}
-
-async function savePriceListToSupabase() {
-    try {
-        const { error } = await supabase.from('price_list').upsert(priceList, { onConflict: 'id' });
-        if (error) throw error;
-        console.log('✅ Прайс сохранен в Supabase');
-    } catch (err) {
-        console.error('❌ Ошибка сохранения прайса:', err);
-    }
-}
-
-async function saveWorkersToSupabase() {
-    try {
-        const { error } = await supabase.from('workers').upsert(workers, { onConflict: 'id' });
-        if (error) throw error;
-        console.log('✅ Работники сохранены в Supabase');
-    } catch (err) {
-        console.error('❌ Ошибка сохранения работников:', err);
-    }
-}
-
-// Переопределяем функции сохранения
-function saveOrders() {
-    localStorage.setItem('bike_orders_v2', JSON.stringify(orders));
-    saveOrdersToSupabase();
-}
-
-function savePrices() {
-    localStorage.setItem('bike_prices_v2', JSON.stringify(priceList));
-    savePriceListToSupabase();
-}
-
-function saveWorkers() {
-    localStorage.setItem('bike_workers_v2', JSON.stringify(workers));
-    saveWorkersToSupabase();
-}
-
-// Функции загрузки
-async function loadAllData() {
-    console.log('🔄 Загрузка данных из Supabase...');
-    await Promise.all([
-        loadOrdersFromSupabase(),
-        loadPriceListFromSupabase(),
-        loadWorkersFromSupabase()
-    ]);
-    console.log('✅ Все данные загружены');
-    render();
-    checkUrlForAuth();
-}
-
-// Начальные данные (если Supabase пуст)
+// Начальные данные
 const defaultPriceList = [
     { id: 'p1', name: 'Замена камеры', price: 500 },
     { id: 'p2', name: 'Настройка переключателей', price: 700 },
@@ -138,8 +64,56 @@ const defaultWorkers = [
     { id: 'w3', name: 'Сергей', phone: '+7 999 345-67-89', login: 'sergey', password: '123', ordersCount: 0, totalEarned: 0 }
 ];
 
-// Загрузка резервная из localStorage
-function loadDataFromLocal() {
+// Функции работы с Supabase
+async function loadFromSupabase() {
+    if (!supabaseClient) {
+        console.log('⚠️ Supabase не доступен, используем localStorage');
+        loadFromLocal();
+        render();
+        return;
+    }
+    
+    console.log('🔄 Загрузка из Supabase...');
+    
+    try {
+        // Загрузка заказов
+        const { data: ordersData, error: ordersError } = await supabaseClient.from('orders').select('*');
+        if (ordersError) throw ordersError;
+        if (ordersData && ordersData.length > 0) orders = ordersData;
+        console.log('✅ Заказов:', orders.length);
+    } catch (err) {
+        console.error('❌ Ошибка загрузки заказов:', err.message);
+    }
+    
+    try {
+        // Загрузка прайса
+        const { data: pricesData, error: pricesError } = await supabaseClient.from('price_list').select('*');
+        if (pricesError) throw pricesError;
+        if (pricesData && pricesData.length > 0) priceList = pricesData;
+        else if (priceList.length === 0) priceList = defaultPriceList;
+        console.log('✅ Прайс:', priceList.length);
+    } catch (err) {
+        console.error('❌ Ошибка загрузки прайса:', err.message);
+        if (priceList.length === 0) priceList = defaultPriceList;
+    }
+    
+    try {
+        // Загрузка работников
+        const { data: workersData, error: workersError } = await supabaseClient.from('workers').select('*');
+        if (workersError) throw workersError;
+        if (workersData && workersData.length > 0) workers = workersData;
+        else if (workers.length === 0) workers = defaultWorkers;
+        console.log('✅ Работников:', workers.length);
+    } catch (err) {
+        console.error('❌ Ошибка загрузки работников:', err.message);
+        if (workers.length === 0) workers = defaultWorkers;
+    }
+    
+    render();
+    checkUrlForAuth();
+}
+
+function loadFromLocal() {
     const storedOrders = localStorage.getItem('bike_orders_v2');
     const storedPrices = localStorage.getItem('bike_prices_v2');
     const storedWorkers = localStorage.getItem('bike_workers_v2');
@@ -153,47 +127,48 @@ function loadDataFromLocal() {
     if (workers.length === 0) workers = defaultWorkers;
 }
 
-function generateId() { return Date.now() + '-' + Math.random().toString(36).substr(2, 6); }
+async function saveToSupabase() {
+    if (!supabaseClient) return;
+    
+    try {
+        if (orders.length) {
+            await supabaseClient.from('orders').upsert(orders, { onConflict: 'id' });
+        }
+        if (priceList.length) {
+            await supabaseClient.from('price_list').upsert(priceList, { onConflict: 'id' });
+        }
+        if (workers.length) {
+            await supabaseClient.from('workers').upsert(workers, { onConflict: 'id' });
+        }
+        console.log('✅ Данные сохранены в Supabase');
+    } catch (err) {
+        console.error('❌ Ошибка сохранения:', err);
+    }
+}
 
-// --- Состояние UI ---
-let currentSection = 'hero';
-let currentFilter = 'all';
-let statsMode = 'today';
-let customStart = '', customEnd = '';
-let drawerOpen = false;
-let isModalOpen = false;
-let editingOrder = null;
-let showAuthModal = false;
-let authError = '';
-let authTargetRole = null;
+function saveToLocal() {
+    localStorage.setItem('bike_orders_v2', JSON.stringify(orders));
+    localStorage.setItem('bike_prices_v2', JSON.stringify(priceList));
+    localStorage.setItem('bike_workers_v2', JSON.stringify(workers));
+}
+
+function saveAll() {
+    saveToLocal();
+    saveToSupabase();
+}
+
+function generateId() {
+    return Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+}
 
 const appRoot = document.getElementById('app');
 
-function toggleDrawer(open) { drawerOpen = open; render(); }
-function setSection(section) { 
-    if (currentRole === ROLES.ADMIN) {
-        currentAdminSection = section;
-    }
-    currentSection = section; 
-    toggleDrawer(false); 
-    render(); 
-}
-function logout() { 
-    currentRole = ROLES.USER; 
-    currentUser = null;
-    currentSection = 'hero';
-    currentAdminSection = 'orders';
-    window.location.hash = '';
-    render(); 
-}
-function closeModal() { 
-    isModalOpen = false; 
-    editingOrder = null;
+function closeModal() {
     showAuthModal = false;
     authTargetRole = null;
-    const modal = document.getElementById('orderModal');
-    if(modal) modal.remove();
-    render(); 
+    const modal = document.getElementById('authModal');
+    if (modal) modal.remove();
+    render();
 }
 
 function showAuthModalFunc(role) {
@@ -204,12 +179,12 @@ function showAuthModalFunc(role) {
 }
 
 function renderAuthModal() {
-    const oldModal = document.getElementById('orderModal');
+    const oldModal = document.getElementById('authModal');
     if (oldModal) oldModal.remove();
     
     const modal = document.createElement('div');
     modal.className = 'modal';
-    modal.id = 'orderModal';
+    modal.id = 'authModal';
     modal.style.display = 'flex';
     modal.innerHTML = `
         <div class="modal-content" style="max-width: 400px;">
@@ -242,8 +217,6 @@ function renderAuthModal() {
             if (login === ADMIN_LOGIN && password === ADMIN_PASSWORD) {
                 currentRole = ROLES.ADMIN;
                 currentUser = null;
-                currentAdminSection = 'orders';
-                currentSection = 'orders';
                 closeModal();
                 render();
             } else {
@@ -255,7 +228,6 @@ function renderAuthModal() {
             if (worker) {
                 currentRole = ROLES.WORKER;
                 currentUser = worker;
-                currentSection = 'my-orders';
                 closeModal();
                 render();
             } else {
@@ -264,6 +236,13 @@ function renderAuthModal() {
             }
         }
     });
+}
+
+function logout() {
+    currentRole = ROLES.USER;
+    currentUser = null;
+    window.location.hash = '';
+    render();
 }
 
 function render() {
@@ -343,52 +322,164 @@ function renderUserPart() {
     
     document.getElementById('requestForm')?.addEventListener('submit', (e) => {
         e.preventDefault();
-        createUserRequest();
+        const fio = document.getElementById('userFio')?.value.trim();
+        const phone = document.getElementById('userPhone')?.value.trim();
+        const address = document.getElementById('userAddress')?.value.trim();
+        const desiredTime = document.getElementById('userDesiredTime')?.value;
+        const problem = document.getElementById('userProblem')?.value;
+        
+        if (!fio || !phone || !address) {
+            alert('Заполните обязательные поля');
+            return;
+        }
+        
+        const newOrder = {
+            id: generateId(),
+            fio, phone, address,
+            desiredTime, problem,
+            status: 'pending',
+            workerId: null, workerName: null,
+            services: [], parts: [], total: 0,
+            createdAt: Date.now()
+        };
+        
+        orders.unshift(newOrder);
+        saveAll();
+        alert('Заявка отправлена!');
+        document.getElementById('requestForm')?.reset();
+        render();
     });
 }
 
-function createUserRequest() {
-    const fio = document.getElementById('userFio')?.value.trim();
-    const phone = document.getElementById('userPhone')?.value.trim();
-    const address = document.getElementById('userAddress')?.value.trim();
-    const desiredTime = document.getElementById('userDesiredTime')?.value;
-    const problem = document.getElementById('userProblem')?.value;
+// ==================== АДМИНКА ====================
+function renderAdminPart() {
+    let html = `
+        <div class="app">
+            <div class="header">
+                <div class="header-left">
+                    <h1>👑 Админ панель</h1>
+                </div>
+                <button class="btn-sm" id="logoutBtn" style="background:#ef4444; color:white;">Выйти</button>
+            </div>
+            <div class="content">
+                <h2>📋 Заказы (${orders.length})</h2>
+                <button class="btn-primary" id="createTestOrder" style="margin-bottom: 1rem;">➕ Тестовый заказ</button>
+                <div id="ordersList"></div>
+            </div>
+        </div>
+    `;
     
-    if (!fio || !phone || !address) {
-        alert('Заполните обязательные поля: ФИО, телефон и адрес');
-        return;
+    appRoot.innerHTML = html;
+    
+    document.getElementById('logoutBtn')?.addEventListener('click', logout);
+    document.getElementById('createTestOrder')?.addEventListener('click', () => {
+        const testOrder = {
+            id: generateId(),
+            fio: 'Тестовый Клиент',
+            phone: '+7 999 000-00-00',
+            address: 'Тестовый адрес',
+            status: 'pending',
+            services: [], parts: [], total: 0,
+            createdAt: Date.now()
+        };
+        orders.unshift(testOrder);
+        saveAll();
+        render();
+    });
+    
+    const container = document.getElementById('ordersList');
+    if (container) {
+        if (orders.length === 0) {
+            container.innerHTML = '<div style="padding:2rem; text-align:center;">Нет заказов</div>';
+        } else {
+            container.innerHTML = orders.map(order => `
+                <div class="order-card">
+                    <div class="order-header">
+                        <strong>${escapeHtml(order.fio)}</strong>
+                        <span class="order-status status-${order.status}">${order.status === 'pending' ? 'Новый' : order.status === 'in-progress' ? 'В работе' : 'Завершён'}</span>
+                    </div>
+                    <div>📞 ${escapeHtml(order.phone)}</div>
+                    <div>📍 ${escapeHtml(order.address || '—')}</div>
+                    <button class="btn-sm" data-delete="${order.id}" style="margin-top:0.5rem; background:#ef4444; color:white;">Удалить</button>
+                </div>
+            `).join('');
+            
+            document.querySelectorAll('[data-delete]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    orders = orders.filter(o => o.id !== btn.dataset.delete);
+                    saveAll();
+                    render();
+                });
+            });
+        }
     }
-    
-    const newOrder = {
-        id: generateId(),
-        fio, phone, address,
-        desiredTime,
-        problem,
-        status: 'pending',
-        workerId: null,
-        workerName: null,
-        services: [],
-        parts: [],
-        total: 0,
-        createdAt: Date.now()
-    };
-    
-    orders.unshift(newOrder);
-    saveOrders();
-    alert('Заявка успешно отправлена! Ожидайте звонка мастера.');
-    document.getElementById('requestForm')?.reset();
-    render();
 }
 
-// ==================== ДАЛЬШЕ ВАШ СУЩЕСТВУЮЩИЙ КОД ====================
-// (функции renderAdminPart, renderWorkerPart, attachDrawerEvents и т.д.)
-// ... ОСТАЛЬНОЙ КОД ОСТАЕТСЯ БЕЗ ИЗМЕНЕНИЙ ...
+// ==================== МАСТЕР ====================
+function renderWorkerPart() {
+    let workerOrders = orders.filter(o => o.workerId === currentUser?.id);
+    
+    let html = `
+        <div class="app">
+            <div class="header">
+                <div class="header-left">
+                    <h1>🔧 ${escapeHtml(currentUser?.name)}</h1>
+                </div>
+                <button class="btn-sm" id="logoutBtn" style="background:#ef4444; color:white;">Выйти</button>
+            </div>
+            <div class="content">
+                <h2>📋 Мои заказы (${workerOrders.length})</h2>
+                <div id="ordersList"></div>
+            </div>
+        </div>
+    `;
+    
+    appRoot.innerHTML = html;
+    document.getElementById('logoutBtn')?.addEventListener('click', logout);
+    
+    const container = document.getElementById('ordersList');
+    if (container) {
+        if (workerOrders.length === 0) {
+            container.innerHTML = '<div style="padding:2rem; text-align:center;">Нет заказов</div>';
+        } else {
+            container.innerHTML = workerOrders.map(order => `
+                <div class="order-card">
+                    <strong>${escapeHtml(order.fio)}</strong>
+                    <div>📞 ${escapeHtml(order.phone)}</div>
+                    <div>📍 ${escapeHtml(order.address || '—')}</div>
+                    <div>Статус: ${order.status === 'pending' ? 'Новый' : order.status === 'in-progress' ? 'В работе' : 'Завершён'}</div>
+                    <div class="order-actions">
+                        ${order.status !== 'completed' ? `<button class="btn-sm btn-success" data-complete="${order.id}">✅ Завершить</button>` : ''}
+                        <button class="btn-sm" data-start="${order.id}">🔧 Начать</button>
+                    </div>
+                </div>
+            `).join('');
+            
+            document.querySelectorAll('[data-complete]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const order = orders.find(o => o.id === btn.dataset.complete);
+                    if (order) { order.status = 'completed'; saveAll(); render(); }
+                });
+            });
+            document.querySelectorAll('[data-start]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const order = orders.find(o => o.id === btn.dataset.start);
+                    if (order && order.status === 'pending') { order.status = 'in-progress'; saveAll(); render(); }
+                });
+            });
+        }
+    }
+}
 
-// ==================== ИНИЦИАЛИЗАЦИЯ ====================
-// Загружаем данные из localStorage как резерв
-loadDataFromLocal();
-// Загружаем из Supabase
-loadAllData();
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
+}
 
 function checkUrlForAuth() {
     const hash = window.location.hash;
@@ -404,3 +495,7 @@ window.addEventListener('hashchange', () => {
         checkUrlForAuth();
     }
 });
+
+// ==================== ЗАПУСК ====================
+console.log('🚀 Запуск...');
+loadFromSupabase();
