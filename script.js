@@ -1,24 +1,24 @@
 // ==================== SUPABASE НАСТРОЙКА ====================
-const SUPABASE_URL = 'https://sjmubbiqceluomzbwwzw.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_bqoiJCZkj7A_32LW49zfUg_xD8tS29A'; // ЗАМЕНИТЕ НА ВАШ КЛЮЧ!
+const KHV_SUPABASE_URL = 'https://sjmubbiqceluomzbwwzw.supabase.co';
+const KHV_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqbXVjYmlxY2VsdW9temJ3d3p3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzUwNjQwMDAsImV4cCI6MjA1MDY0MDAwMH0';
 
-// Создаем Supabase клиент
-let supabaseClient = null;
+// Создаем Supabase клиент (используем уникальное имя)
+let khvSupabase = null;
 
-// Ждем загрузки библиотеки
-function initSupabase() {
+// Пытаемся создать клиент
+try {
     if (typeof window.supabase !== 'undefined') {
-        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        khvSupabase = window.supabase.createClient(KHV_SUPABASE_URL, KHV_SUPABASE_KEY);
         console.log('✅ Supabase подключен!');
-        return true;
     } else {
-        console.error('❌ Supabase библиотека не загружена');
-        return false;
+        console.log('⚠️ Supabase не загружен, работаем локально');
     }
+} catch(e) {
+    console.error('❌ Ошибка Supabase:', e);
 }
 
 // ==================== ДАННЫЕ ====================
-let currentRole = 'user'; // user, admin, worker
+let currentRole = 'user';
 let currentUser = null;
 let orders = [];
 let priceList = [];
@@ -44,62 +44,69 @@ const defaultWorkers = [
     { id: 'w3', name: 'Сергей', phone: '+7 999 345-67-89', login: 'sergey', password: '123' }
 ];
 
-// ==================== ФУНКЦИИ СОХРАНЕНИЯ ====================
+// ==================== ФУНКЦИИ ====================
 function generateId() {
     return Date.now() + '-' + Math.random().toString(36).substr(2, 8);
 }
 
 function saveToLocal() {
-    localStorage.setItem('khv_orders', JSON.stringify(orders));
-    localStorage.setItem('khv_prices', JSON.stringify(priceList));
-    localStorage.setItem('khv_workers', JSON.stringify(workers));
-}
-
-function loadFromLocal() {
-    const savedOrders = localStorage.getItem('khv_orders');
-    const savedPrices = localStorage.getItem('khv_prices');
-    const savedWorkers = localStorage.getItem('khv_workers');
-    
-    orders = savedOrders ? JSON.parse(savedOrders) : [];
-    priceList = savedPrices ? JSON.parse(savedPrices) : defaultPriceList;
-    workers = savedWorkers ? JSON.parse(savedWorkers) : defaultWorkers;
-}
-
-async function saveToSupabase() {
-    if (!supabaseClient) return;
     try {
-        if (orders.length) await supabaseClient.from('orders').upsert(orders);
-        if (priceList.length) await supabaseClient.from('price_list').upsert(priceList);
-        if (workers.length) await supabaseClient.from('workers').upsert(workers);
-        console.log('✅ Сохранено в Supabase');
+        localStorage.setItem('khv_orders', JSON.stringify(orders));
+        localStorage.setItem('khv_prices', JSON.stringify(priceList));
+        localStorage.setItem('khv_workers', JSON.stringify(workers));
+        console.log('💾 Сохранено в localStorage');
     } catch(e) { console.error('Ошибка сохранения:', e); }
 }
 
+function loadFromLocal() {
+    try {
+        const savedOrders = localStorage.getItem('khv_orders');
+        const savedPrices = localStorage.getItem('khv_prices');
+        const savedWorkers = localStorage.getItem('khv_workers');
+        
+        orders = savedOrders ? JSON.parse(savedOrders) : [];
+        priceList = savedPrices ? JSON.parse(savedPrices) : defaultPriceList;
+        workers = savedWorkers ? JSON.parse(savedWorkers) : defaultWorkers;
+        console.log('📂 Загружено из localStorage:', orders.length, 'заказов');
+    } catch(e) { console.error('Ошибка загрузки:', e); }
+}
+
+async function saveToSupabase() {
+    if (!khvSupabase) return;
+    try {
+        if (orders.length) await khvSupabase.from('orders').upsert(orders);
+        if (priceList.length) await khvSupabase.from('price_list').upsert(priceList);
+        if (workers.length) await khvSupabase.from('workers').upsert(workers);
+        console.log('☁️ Сохранено в Supabase');
+    } catch(e) { console.error('Ошибка Supabase:', e); }
+}
+
 async function loadFromSupabase() {
-    if (!supabaseClient) {
+    if (!khvSupabase) {
         loadFromLocal();
         render();
         return;
     }
     
     try {
-        const { data: o } = await supabaseClient.from('orders').select('*');
+        const { data: o } = await khvSupabase.from('orders').select('*');
         if (o && o.length) orders = o;
         
-        const { data: p } = await supabaseClient.from('price_list').select('*');
+        const { data: p } = await khvSupabase.from('price_list').select('*');
         if (p && p.length) priceList = p;
         else if (priceList.length === 0) priceList = defaultPriceList;
         
-        const { data: w } = await supabaseClient.from('workers').select('*');
+        const { data: w } = await khvSupabase.from('workers').select('*');
         if (w && w.length) workers = w;
         else if (workers.length === 0) workers = defaultWorkers;
         
-        console.log('✅ Загружено из Supabase:', orders.length, 'заказов');
+        console.log('☁️ Загружено из Supabase:', orders.length, 'заказов');
     } catch(e) {
-        console.error('Ошибка загрузки:', e);
+        console.error('Ошибка Supabase:', e);
         loadFromLocal();
     }
     render();
+    checkHash();
 }
 
 function saveAll() {
@@ -107,17 +114,19 @@ function saveAll() {
     saveToSupabase();
 }
 
-// ==================== UI ФУНКЦИИ ====================
-const app = document.getElementById('app');
+// ==================== UI ====================
+const appElement = document.getElementById('app');
 
 function render() {
+    if (!appElement) return;
+    
     if (currentRole === 'user') renderUser();
     else if (currentRole === 'admin') renderAdmin();
     else if (currentRole === 'worker') renderWorker();
 }
 
 function renderUser() {
-    app.innerHTML = `
+    appElement.innerHTML = `
         <div class="app">
             <div class="header">
                 <div class="header-left">
@@ -144,48 +153,50 @@ function renderUser() {
                         <div class="form-group"><label>Адрес *</label><input type="text" id="address" required></div>
                         <div class="form-group"><label>Желаемое время</label><input type="datetime-local" id="time"></div>
                         <div class="form-group"><label>Описание проблемы</label><textarea id="problem" rows="3"></textarea></div>
-                        <button type="submit" class="btn btn-primary">Отправить</button>
+                        <button type="submit" class="btn btn-primary">Отправить заявку</button>
                     </form>
                 </div>
             </div>
         </div>
     `;
     
-    document.getElementById('requestForm')?.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const fio = document.getElementById('fio').value.trim();
-        const phone = document.getElementById('phone').value.trim();
-        const address = document.getElementById('address').value.trim();
-        
-        if (!fio || !phone || !address) {
-            alert('Заполните ФИО, телефон и адрес');
-            return;
-        }
-        
-        const newOrder = {
-            id: generateId(),
-            fio, phone, address,
-            desiredTime: document.getElementById('time').value,
-            problem: document.getElementById('problem').value,
-            status: 'pending',
-            workerId: null,
-            workerName: null,
-            services: [],
-            parts: [],
-            total: 0,
-            createdAt: Date.now()
-        };
-        
-        orders.unshift(newOrder);
-        saveAll();
-        alert('✅ Заявка отправлена!');
-        document.getElementById('requestForm').reset();
-        render();
-    });
+    const form = document.getElementById('requestForm');
+    if (form) {
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const fio = document.getElementById('fio').value.trim();
+            const phone = document.getElementById('phone').value.trim();
+            const address = document.getElementById('address').value.trim();
+            
+            if (!fio || !phone || !address) {
+                alert('Заполните ФИО, телефон и адрес');
+                return;
+            }
+            
+            const newOrder = {
+                id: generateId(),
+                fio, phone, address,
+                desiredTime: document.getElementById('time').value,
+                problem: document.getElementById('problem').value,
+                status: 'pending',
+                workerId: null,
+                workerName: null,
+                services: [],
+                parts: [],
+                total: 0,
+                createdAt: Date.now()
+            };
+            
+            orders.unshift(newOrder);
+            saveAll();
+            alert('✅ Заявка отправлена! Ожидайте звонка мастера.');
+            form.reset();
+        });
+    }
 }
 
 function renderAdmin() {
-    app.innerHTML = `
+    appElement.innerHTML = `
         <div class="app">
             <div class="header">
                 <div class="header-left">
@@ -196,14 +207,17 @@ function renderAdmin() {
             <div class="content">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                     <h2>📋 Заказы (${orders.length})</h2>
-                    <button class="btn-primary" id="addTestOrder">➕ Тестовый</button>
+                    <button class="btn-primary" id="addTestOrder">➕ Тестовый заказ</button>
                 </div>
                 <div id="ordersList"></div>
-                <div style="margin-top: 2rem;">
-                    <h3>➕ Ссылки для входа:</h3>
-                    <p>🔑 Админ: <code>khvbikerepair.ru/#admin</code></p>
-                    <p>🔧 Мастер: <code>khvbikerepair.ru/#worker</code></p>
-                    <p>👤 Клиент: <code>khvbikerepair.ru/</code></p>
+                <div style="margin-top: 2rem; padding: 1rem; background: #f1f5f9; border-radius: 0.5rem;">
+                    <h3>🔐 Данные для входа:</h3>
+                    <p><strong>Админ:</strong> логин: DaniilBuzakov | пароль: 123654123Aa@</p>
+                    <p><strong>Мастер Алексей:</strong> логин: alexey | пароль: 123</p>
+                    <p><strong>Мастер Дмитрий:</strong> логин: dmitry | пароль: 123</p>
+                    <p><strong>Мастер Сергей:</strong> логин: sergey | пароль: 123</p>
+                    <hr>
+                    <p>🔗 <strong>Ссылки:</strong> Клиент: / | Админ: /#admin | Мастер: /#worker</p>
                 </div>
             </div>
         </div>
@@ -222,6 +236,7 @@ function renderAdmin() {
             fio: 'Тестовый Клиент',
             phone: '+7 999 000-00-00',
             address: 'Тестовый адрес',
+            problem: 'Тестовая заявка',
             status: 'pending',
             services: [],
             parts: [],
@@ -235,7 +250,7 @@ function renderAdmin() {
     const container = document.getElementById('ordersList');
     if (container) {
         if (orders.length === 0) {
-            container.innerHTML = '<div style="text-align:center; padding:2rem; color:#888;">Нет заказов</div>';
+            container.innerHTML = '<div style="text-align:center; padding:2rem; color:#888;">Нет заказов. Создайте тестовый заказ</div>';
         } else {
             container.innerHTML = orders.map(order => `
                 <div class="order-card">
@@ -284,8 +299,10 @@ function renderAdmin() {
 
 function renderWorker() {
     const workerOrders = orders.filter(o => o.workerId === currentUser?.id);
+    const completedCount = workerOrders.filter(o => o.status === 'completed').length;
+    const totalEarned = workerOrders.filter(o => o.status === 'completed').reduce((sum, o) => sum + o.total, 0);
     
-    app.innerHTML = `
+    appElement.innerHTML = `
         <div class="app">
             <div class="header">
                 <div class="header-left">
@@ -294,6 +311,9 @@ function renderWorker() {
                 <button class="btn-sm" id="logoutBtn" style="background:#ef4444; color:white;">Выйти</button>
             </div>
             <div class="content">
+                <div style="background: #eef2ff; padding: 1rem; border-radius: 0.75rem; margin-bottom: 1rem;">
+                    📊 <strong>Ваша статистика:</strong> ${completedCount} завершённых заказов | 💰 ${totalEarned} ₽
+                </div>
                 <h2>📋 Мои заказы (${workerOrders.length})</h2>
                 <div id="ordersList"></div>
             </div>
@@ -320,10 +340,11 @@ function renderWorker() {
                     </div>
                     <div>📞 ${escapeHtml(order.phone)}</div>
                     <div>📍 ${escapeHtml(order.address || '—')}</div>
+                    <div>⏱ ${order.desiredTime ? new Date(order.desiredTime).toLocaleString() : 'время не указано'}</div>
                     ${order.problem ? `<div class="order-problem">📝 ${escapeHtml(order.problem)}</div>` : ''}
-                    <div class="order-actions" style="margin-top: 0.5rem;">
+                    <div class="order-actions">
                         ${order.status === 'pending' ? `<button data-start="${order.id}" class="btn-sm">🔧 Начать работу</button>` : ''}
-                        ${order.status === 'in-progress' ? `<button data-complete="${order.id}" class="btn-sm btn-success">✅ Завершить</button>` : ''}
+                        ${order.status === 'in-progress' ? `<button data-complete="${order.id}" class="btn-sm btn-success">✅ Завершить заказ</button>` : ''}
                     </div>
                 </div>
             `).join('');
@@ -331,14 +352,22 @@ function renderWorker() {
             document.querySelectorAll('[data-start]').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const order = orders.find(o => o.id === btn.dataset.start);
-                    if (order) { order.status = 'in-progress'; saveAll(); render(); }
+                    if (order) { 
+                        order.status = 'in-progress'; 
+                        saveAll(); 
+                        render(); 
+                    }
                 });
             });
             
             document.querySelectorAll('[data-complete]').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const order = orders.find(o => o.id === btn.dataset.complete);
-                    if (order && confirm('Завершить заказ?')) { order.status = 'completed'; saveAll(); render(); }
+                    if (order && confirm('Завершить заказ?')) { 
+                        order.status = 'completed'; 
+                        saveAll(); 
+                        render(); 
+                    }
                 });
             });
         }
@@ -346,7 +375,7 @@ function renderWorker() {
 }
 
 function getStatusText(status) {
-    const map = { pending: 'Новый', 'in-progress': 'В работе', completed: 'Завершён' };
+    const map = { pending: '🟡 Новый', 'in-progress': '🔵 В работе', completed: '✅ Завершён' };
     return map[status] || status;
 }
 
@@ -387,7 +416,7 @@ function showLoginModal(role) {
                 closeModal();
                 render();
             } else {
-                alert('Неверный логин или пароль');
+                alert('❌ Неверный логин или пароль');
             }
         } else if (role === 'worker') {
             const worker = workers.find(w => w.login === login && w.password === password);
@@ -397,7 +426,7 @@ function showLoginModal(role) {
                 closeModal();
                 render();
             } else {
-                alert('Неверный логин или пароль');
+                alert('❌ Неверный логин или пароль');
             }
         }
     });
@@ -405,9 +434,9 @@ function showLoginModal(role) {
 
 function checkHash() {
     const hash = window.location.hash;
-    if (hash === '#admin') {
+    if (hash === '#admin' && currentRole === 'user') {
         showLoginModal('admin');
-    } else if (hash === '#worker') {
+    } else if (hash === '#worker' && currentRole === 'user') {
         showLoginModal('worker');
     }
 }
@@ -417,7 +446,7 @@ window.addEventListener('hashchange', () => {
     if (currentRole === 'user') checkHash();
 });
 
-// Инициализация
-initSupabase();
-loadFromSupabase();
+// Стартуем приложение
+loadFromLocal();
+render();
 checkHash();
