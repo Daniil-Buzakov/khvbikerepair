@@ -655,3 +655,76 @@ body {
     padding: 1rem;
     margin-bottom: 0.75rem;
 }
+
+/* Drawer styles */
+.drawer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.4);
+    z-index: 100;
+    visibility: hidden;
+    opacity: 0;
+    transition: all 0.2s ease;
+}
+
+.drawer-overlay.open {
+    visibility: visible;
+    opacity: 1;
+}
+
+.drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 280px;
+    height: 100%;
+    background: white;
+    box-shadow: 2px 0 12px rgba(0,0,0,0.2);
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 101;
+    padding: 1.5rem 0;
+}
+
+.drawer-overlay.open .drawer {
+    transform: translateX(0);
+}
+
+.drawer-header {
+    padding: 0 1rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    font-weight: bold;
+    font-size: 1.2rem;
+}
+
+.drawer-nav {
+    list-style: none;
+    padding: 1rem 0;
+}
+
+.drawer-nav li {
+    padding: 0.75rem 1.5rem;
+    cursor: pointer;
+    transition: background 0.1s;
+    font-weight: 500;
+}
+
+.drawer-nav li:hover {
+    background: #eef2ff;
+}
+
+.drawer-nav li.active {
+    background: #3b82f6;
+    color: white;
+}
+
+.close-drawer {
+    margin-top: 2rem;
+    text-align: center;
+    padding: 0.75rem;
+    color: #64748b;
+    cursor: pointer;
+}
