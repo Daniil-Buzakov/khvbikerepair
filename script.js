@@ -1,50 +1,30 @@
-// ==================== SUPABASE КОНФИГУРАЦИЯ ====================
-// ВАШИ ДАННЫЕ ИЗ SUPABASE
+// ==================== SUPABASE НАСТРОЙКА ====================
 const SUPABASE_URL = 'https://sjmubbiqceluomzbwwzw.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_bqoiJCZkj7A_32LW49zfUg_xD8tS29A'; // ВСТАВЬТЕ ВАШ ПОЛНЫЙ КЛЮЧ!
+const SUPABASE_KEY = 'sb_publishable_bqoiJCZkj7A_32LW49zfUg_xD8tS29A'; // ЗАМЕНИТЕ НА ВАШ КЛЮЧ!
 
-// Проверяем, загрузилась ли библиотека Supabase
-if (typeof supabase === 'undefined' && typeof window.supabase !== 'undefined') {
-    var supabaseLib = window.supabase;
-} else if (typeof supabase !== 'undefined') {
-    var supabaseLib = supabase;
-} else {
-    console.error('❌ Supabase библиотека не загружена! Проверьте интернет и index.html');
-    var supabaseLib = null;
-}
-
-// Создаем клиент
+// Создаем Supabase клиент
 let supabaseClient = null;
-if (supabaseLib) {
-    try {
-        supabaseClient = supabaseLib.createClient(SUPABASE_URL, SUPABASE_KEY);
-        console.log('✅ Supabase клиент создан!');
-    } catch (e) {
-        console.error('❌ Ошибка создания клиента:', e);
+
+// Ждем загрузки библиотеки
+function initSupabase() {
+    if (typeof window.supabase !== 'undefined') {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        console.log('✅ Supabase подключен!');
+        return true;
+    } else {
+        console.error('❌ Supabase библиотека не загружена');
+        return false;
     }
-} else {
-    console.error('❌ Не удалось создать Supabase клиент');
 }
 
-// --- Роли пользователей ---
-const ROLES = {
-    USER: 'user',
-    ADMIN: 'admin',
-    WORKER: 'worker'
-};
-
-// --- Состояние приложения ---
-let currentRole = ROLES.USER;
+// ==================== ДАННЫЕ ====================
+let currentRole = 'user'; // user, admin, worker
+let currentUser = null;
 let orders = [];
 let priceList = [];
 let workers = [];
-let currentUser = null;
-let drawerOpen = false;
-let showAuthModal = false;
-let authError = '';
-let authTargetRole = null;
 
-// Данные для авторизации админа
+// Админ данные
 const ADMIN_LOGIN = 'DaniilBuzakov';
 const ADMIN_PASSWORD = '123654123Aa@';
 
@@ -59,97 +39,67 @@ const defaultPriceList = [
 ];
 
 const defaultWorkers = [
-    { id: 'w1', name: 'Алексей', phone: '+7 999 123-45-67', login: 'alexey', password: '123', ordersCount: 0, totalEarned: 0 },
-    { id: 'w2', name: 'Дмитрий', phone: '+7 999 234-56-78', login: 'dmitry', password: '123', ordersCount: 0, totalEarned: 0 },
-    { id: 'w3', name: 'Сергей', phone: '+7 999 345-67-89', login: 'sergey', password: '123', ordersCount: 0, totalEarned: 0 }
+    { id: 'w1', name: 'Алексей', phone: '+7 999 123-45-67', login: 'alexey', password: '123' },
+    { id: 'w2', name: 'Дмитрий', phone: '+7 999 234-56-78', login: 'dmitry', password: '123' },
+    { id: 'w3', name: 'Сергей', phone: '+7 999 345-67-89', login: 'sergey', password: '123' }
 ];
 
-// Функции работы с Supabase
+// ==================== ФУНКЦИИ СОХРАНЕНИЯ ====================
+function generateId() {
+    return Date.now() + '-' + Math.random().toString(36).substr(2, 8);
+}
+
+function saveToLocal() {
+    localStorage.setItem('khv_orders', JSON.stringify(orders));
+    localStorage.setItem('khv_prices', JSON.stringify(priceList));
+    localStorage.setItem('khv_workers', JSON.stringify(workers));
+}
+
+function loadFromLocal() {
+    const savedOrders = localStorage.getItem('khv_orders');
+    const savedPrices = localStorage.getItem('khv_prices');
+    const savedWorkers = localStorage.getItem('khv_workers');
+    
+    orders = savedOrders ? JSON.parse(savedOrders) : [];
+    priceList = savedPrices ? JSON.parse(savedPrices) : defaultPriceList;
+    workers = savedWorkers ? JSON.parse(savedWorkers) : defaultWorkers;
+}
+
+async function saveToSupabase() {
+    if (!supabaseClient) return;
+    try {
+        if (orders.length) await supabaseClient.from('orders').upsert(orders);
+        if (priceList.length) await supabaseClient.from('price_list').upsert(priceList);
+        if (workers.length) await supabaseClient.from('workers').upsert(workers);
+        console.log('✅ Сохранено в Supabase');
+    } catch(e) { console.error('Ошибка сохранения:', e); }
+}
+
 async function loadFromSupabase() {
     if (!supabaseClient) {
-        console.log('⚠️ Supabase не доступен, используем localStorage');
         loadFromLocal();
         render();
         return;
     }
     
-    console.log('🔄 Загрузка из Supabase...');
-    
     try {
-        // Загрузка заказов
-        const { data: ordersData, error: ordersError } = await supabaseClient.from('orders').select('*');
-        if (ordersError) throw ordersError;
-        if (ordersData && ordersData.length > 0) orders = ordersData;
-        console.log('✅ Заказов:', orders.length);
-    } catch (err) {
-        console.error('❌ Ошибка загрузки заказов:', err.message);
-    }
-    
-    try {
-        // Загрузка прайса
-        const { data: pricesData, error: pricesError } = await supabaseClient.from('price_list').select('*');
-        if (pricesError) throw pricesError;
-        if (pricesData && pricesData.length > 0) priceList = pricesData;
+        const { data: o } = await supabaseClient.from('orders').select('*');
+        if (o && o.length) orders = o;
+        
+        const { data: p } = await supabaseClient.from('price_list').select('*');
+        if (p && p.length) priceList = p;
         else if (priceList.length === 0) priceList = defaultPriceList;
-        console.log('✅ Прайс:', priceList.length);
-    } catch (err) {
-        console.error('❌ Ошибка загрузки прайса:', err.message);
-        if (priceList.length === 0) priceList = defaultPriceList;
-    }
-    
-    try {
-        // Загрузка работников
-        const { data: workersData, error: workersError } = await supabaseClient.from('workers').select('*');
-        if (workersError) throw workersError;
-        if (workersData && workersData.length > 0) workers = workersData;
+        
+        const { data: w } = await supabaseClient.from('workers').select('*');
+        if (w && w.length) workers = w;
         else if (workers.length === 0) workers = defaultWorkers;
-        console.log('✅ Работников:', workers.length);
-    } catch (err) {
-        console.error('❌ Ошибка загрузки работников:', err.message);
-        if (workers.length === 0) workers = defaultWorkers;
+        
+        console.log('✅ Загружено из Supabase:', orders.length, 'заказов');
+    } catch(e) {
+        console.error('Ошибка загрузки:', e);
+        loadFromLocal();
     }
-    
     render();
-    checkUrlForAuth();
-}
-
-function loadFromLocal() {
-    const storedOrders = localStorage.getItem('bike_orders_v2');
-    const storedPrices = localStorage.getItem('bike_prices_v2');
-    const storedWorkers = localStorage.getItem('bike_workers_v2');
-    
-    if (storedOrders) orders = JSON.parse(storedOrders);
-    if (storedPrices) priceList = JSON.parse(storedPrices);
-    if (storedWorkers) workers = JSON.parse(storedWorkers);
-    
-    if (orders.length === 0) orders = [];
-    if (priceList.length === 0) priceList = defaultPriceList;
-    if (workers.length === 0) workers = defaultWorkers;
-}
-
-async function saveToSupabase() {
-    if (!supabaseClient) return;
-    
-    try {
-        if (orders.length) {
-            await supabaseClient.from('orders').upsert(orders, { onConflict: 'id' });
-        }
-        if (priceList.length) {
-            await supabaseClient.from('price_list').upsert(priceList, { onConflict: 'id' });
-        }
-        if (workers.length) {
-            await supabaseClient.from('workers').upsert(workers, { onConflict: 'id' });
-        }
-        console.log('✅ Данные сохранены в Supabase');
-    } catch (err) {
-        console.error('❌ Ошибка сохранения:', err);
-    }
-}
-
-function saveToLocal() {
-    localStorage.setItem('bike_orders_v2', JSON.stringify(orders));
-    localStorage.setItem('bike_prices_v2', JSON.stringify(priceList));
-    localStorage.setItem('bike_workers_v2', JSON.stringify(workers));
 }
 
 function saveAll() {
@@ -157,203 +107,85 @@ function saveAll() {
     saveToSupabase();
 }
 
-function generateId() {
-    return Date.now() + '-' + Math.random().toString(36).substr(2, 6);
-}
-
-const appRoot = document.getElementById('app');
-
-function closeModal() {
-    showAuthModal = false;
-    authTargetRole = null;
-    const modal = document.getElementById('authModal');
-    if (modal) modal.remove();
-    render();
-}
-
-function showAuthModalFunc(role) {
-    showAuthModal = true;
-    authTargetRole = role;
-    authError = '';
-    renderAuthModal();
-}
-
-function renderAuthModal() {
-    const oldModal = document.getElementById('authModal');
-    if (oldModal) oldModal.remove();
-    
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    modal.id = 'authModal';
-    modal.style.display = 'flex';
-    modal.innerHTML = `
-        <div class="modal-content" style="max-width: 400px;">
-            <div class="modal-header">
-                <h3>Вход в ${authTargetRole === ROLES.ADMIN ? 'Админ-панель' : 'Кабинет мастера'}</h3>
-                <button class="modal-close" id="closeModalBtn">&times;</button>
-            </div>
-            ${authError ? `<div style="background:#fee; color:#c00; padding:0.5rem; border-radius:0.5rem; margin-bottom:1rem;">${authError}</div>` : ''}
-            <div class="form-group">
-                <label>Логин</label>
-                <input type="text" id="authLogin" placeholder="Логин">
-            </div>
-            <div class="form-group">
-                <label>Пароль</label>
-                <input type="password" id="authPassword" placeholder="Пароль">
-            </div>
-            <button class="btn-primary" id="authSubmitBtn" style="width:100%;">Войти</button>
-        </div>
-    `;
-    document.body.appendChild(modal);
-    
-    document.getElementById('closeModalBtn')?.addEventListener('click', closeModal);
-    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-    
-    document.getElementById('authSubmitBtn')?.addEventListener('click', () => {
-        const login = document.getElementById('authLogin')?.value.trim();
-        const password = document.getElementById('authPassword')?.value;
-        
-        if (authTargetRole === ROLES.ADMIN) {
-            if (login === ADMIN_LOGIN && password === ADMIN_PASSWORD) {
-                currentRole = ROLES.ADMIN;
-                currentUser = null;
-                closeModal();
-                render();
-            } else {
-                authError = 'Неверный логин или пароль';
-                renderAuthModal();
-            }
-        } else if (authTargetRole === ROLES.WORKER) {
-            const worker = workers.find(w => w.login === login && w.password === password);
-            if (worker) {
-                currentRole = ROLES.WORKER;
-                currentUser = worker;
-                closeModal();
-                render();
-            } else {
-                authError = 'Неверный логин или пароль';
-                renderAuthModal();
-            }
-        }
-    });
-}
-
-function logout() {
-    currentRole = ROLES.USER;
-    currentUser = null;
-    window.location.hash = '';
-    render();
-}
+// ==================== UI ФУНКЦИИ ====================
+const app = document.getElementById('app');
 
 function render() {
-    if (currentRole === ROLES.USER) {
-        renderUserPart();
-    } else if (currentRole === ROLES.ADMIN) {
-        renderAdminPart();
-    } else if (currentRole === ROLES.WORKER) {
-        renderWorkerPart();
-    }
+    if (currentRole === 'user') renderUser();
+    else if (currentRole === 'admin') renderAdmin();
+    else if (currentRole === 'worker') renderWorker();
 }
 
-// ==================== ПОЛЬЗОВАТЕЛЬСКАЯ ЧАСТЬ ====================
-function renderUserPart() {
-    let html = `
+function renderUser() {
+    app.innerHTML = `
         <div class="app">
             <div class="header">
                 <div class="header-left">
-                    <h1><span class="logo-icon">🚲</span> KHV Bike Repair</h1>
+                    <h1>🚲 KHV Bike Repair</h1>
                 </div>
             </div>
             <div class="content">
                 <div class="hero">
                     <h1>🚲 Ремонт велосипедов с выездом на дом</h1>
-                    <p>Профессиональный ремонт, настройка и обслуживание велосипедов в удобное для вас время</p>
+                    <p>Профессиональный ремонт, настройка и обслуживание</p>
                 </div>
                 
                 <div class="services-grid">
-                    <div class="service-card">
-                        <div class="service-icon">🔧</div>
-                        <h3>Диагностика</h3>
-                        <p>Бесплатная диагностика неисправностей</p>
-                    </div>
-                    <div class="service-card">
-                        <div class="service-icon">🛠️</div>
-                        <h3>Любой ремонт</h3>
-                        <p>От прокола до полной сборки велосипеда</p>
-                    </div>
-                    <div class="service-card">
-                        <div class="service-icon">📦</div>
-                        <h3>Выезд мастера</h3>
-                        <p>Ремонтируем велосипеды у вас дома</p>
-                    </div>
+                    <div class="service-card"><div class="service-icon">🔧</div><h3>Диагностика</h3><p>Бесплатно</p></div>
+                    <div class="service-card"><div class="service-icon">🛠️</div><h3>Любой ремонт</h3><p>Качественно</p></div>
+                    <div class="service-card"><div class="service-icon">📦</div><h3>Выезд мастера</h3><p>К вам домой</p></div>
                 </div>
                 
                 <div class="request-form">
-                    <h2>📝 Оставить заявку на ремонт</h2>
+                    <h2>📝 Заявка на ремонт</h2>
                     <form id="requestForm">
-                        <div class="form-group">
-                            <label>ФИО *</label>
-                            <input type="text" id="userFio" required placeholder="Иванов Иван Иванович">
-                        </div>
-                        <div class="form-group">
-                            <label>Номер телефона *</label>
-                            <input type="tel" id="userPhone" required placeholder="+7 999 123-45-67">
-                        </div>
-                        <div class="form-group">
-                            <label>Адрес ремонта *</label>
-                            <input type="text" id="userAddress" required placeholder="г. Москва, ул. Примерная, д.1, кв.2">
-                        </div>
-                        <div class="form-group">
-                            <label>Желаемое время приезда мастера</label>
-                            <input type="datetime-local" id="userDesiredTime">
-                        </div>
-                        <div class="form-group">
-                            <label>Описание проблемы</label>
-                            <textarea id="userProblem" placeholder="Опишите, что случилось с велосипедом..."></textarea>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Отправить заявку</button>
+                        <div class="form-group"><label>ФИО *</label><input type="text" id="fio" required></div>
+                        <div class="form-group"><label>Телефон *</label><input type="tel" id="phone" required></div>
+                        <div class="form-group"><label>Адрес *</label><input type="text" id="address" required></div>
+                        <div class="form-group"><label>Желаемое время</label><input type="datetime-local" id="time"></div>
+                        <div class="form-group"><label>Описание проблемы</label><textarea id="problem" rows="3"></textarea></div>
+                        <button type="submit" class="btn btn-primary">Отправить</button>
                     </form>
                 </div>
             </div>
         </div>
     `;
     
-    appRoot.innerHTML = html;
-    
     document.getElementById('requestForm')?.addEventListener('submit', (e) => {
         e.preventDefault();
-        const fio = document.getElementById('userFio')?.value.trim();
-        const phone = document.getElementById('userPhone')?.value.trim();
-        const address = document.getElementById('userAddress')?.value.trim();
-        const desiredTime = document.getElementById('userDesiredTime')?.value;
-        const problem = document.getElementById('userProblem')?.value;
+        const fio = document.getElementById('fio').value.trim();
+        const phone = document.getElementById('phone').value.trim();
+        const address = document.getElementById('address').value.trim();
         
         if (!fio || !phone || !address) {
-            alert('Заполните обязательные поля');
+            alert('Заполните ФИО, телефон и адрес');
             return;
         }
         
         const newOrder = {
             id: generateId(),
             fio, phone, address,
-            desiredTime, problem,
+            desiredTime: document.getElementById('time').value,
+            problem: document.getElementById('problem').value,
             status: 'pending',
-            workerId: null, workerName: null,
-            services: [], parts: [], total: 0,
+            workerId: null,
+            workerName: null,
+            services: [],
+            parts: [],
+            total: 0,
             createdAt: Date.now()
         };
         
         orders.unshift(newOrder);
         saveAll();
-        alert('Заявка отправлена!');
-        document.getElementById('requestForm')?.reset();
+        alert('✅ Заявка отправлена!');
+        document.getElementById('requestForm').reset();
         render();
     });
 }
 
-// ==================== АДМИНКА ====================
-function renderAdminPart() {
-    let html = `
+function renderAdmin() {
+    app.innerHTML = `
         <div class="app">
             <div class="header">
                 <div class="header-left">
@@ -362,27 +194,40 @@ function renderAdminPart() {
                 <button class="btn-sm" id="logoutBtn" style="background:#ef4444; color:white;">Выйти</button>
             </div>
             <div class="content">
-                <h2>📋 Заказы (${orders.length})</h2>
-                <button class="btn-primary" id="createTestOrder" style="margin-bottom: 1rem;">➕ Тестовый заказ</button>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h2>📋 Заказы (${orders.length})</h2>
+                    <button class="btn-primary" id="addTestOrder">➕ Тестовый</button>
+                </div>
                 <div id="ordersList"></div>
+                <div style="margin-top: 2rem;">
+                    <h3>➕ Ссылки для входа:</h3>
+                    <p>🔑 Админ: <code>khvbikerepair.ru/#admin</code></p>
+                    <p>🔧 Мастер: <code>khvbikerepair.ru/#worker</code></p>
+                    <p>👤 Клиент: <code>khvbikerepair.ru/</code></p>
+                </div>
             </div>
         </div>
     `;
     
-    appRoot.innerHTML = html;
+    document.getElementById('logoutBtn')?.addEventListener('click', () => {
+        currentRole = 'user';
+        currentUser = null;
+        window.location.hash = '';
+        render();
+    });
     
-    document.getElementById('logoutBtn')?.addEventListener('click', logout);
-    document.getElementById('createTestOrder')?.addEventListener('click', () => {
-        const testOrder = {
+    document.getElementById('addTestOrder')?.addEventListener('click', () => {
+        orders.unshift({
             id: generateId(),
             fio: 'Тестовый Клиент',
             phone: '+7 999 000-00-00',
             address: 'Тестовый адрес',
             status: 'pending',
-            services: [], parts: [], total: 0,
+            services: [],
+            parts: [],
+            total: 0,
             createdAt: Date.now()
-        };
-        orders.unshift(testOrder);
+        });
         saveAll();
         render();
     });
@@ -390,36 +235,57 @@ function renderAdminPart() {
     const container = document.getElementById('ordersList');
     if (container) {
         if (orders.length === 0) {
-            container.innerHTML = '<div style="padding:2rem; text-align:center;">Нет заказов</div>';
+            container.innerHTML = '<div style="text-align:center; padding:2rem; color:#888;">Нет заказов</div>';
         } else {
             container.innerHTML = orders.map(order => `
                 <div class="order-card">
                     <div class="order-header">
                         <strong>${escapeHtml(order.fio)}</strong>
-                        <span class="order-status status-${order.status}">${order.status === 'pending' ? 'Новый' : order.status === 'in-progress' ? 'В работе' : 'Завершён'}</span>
+                        <span class="order-status status-${order.status}">${getStatusText(order.status)}</span>
                     </div>
                     <div>📞 ${escapeHtml(order.phone)}</div>
                     <div>📍 ${escapeHtml(order.address || '—')}</div>
-                    <button class="btn-sm" data-delete="${order.id}" style="margin-top:0.5rem; background:#ef4444; color:white;">Удалить</button>
+                    ${order.problem ? `<div class="order-problem">📝 ${escapeHtml(order.problem)}</div>` : ''}
+                    <div style="margin-top: 0.5rem;">
+                        <select data-assign="${order.id}" class="btn-sm">
+                            <option value="">👨‍🔧 Назначить мастера</option>
+                            ${workers.map(w => `<option value="${w.id}" ${order.workerId === w.id ? 'selected' : ''}>${escapeHtml(w.name)}</option>`).join('')}
+                        </select>
+                        <button data-delete="${order.id}" class="btn-sm" style="background:#ef4444; color:white; margin-left:0.5rem;">🗑 Удалить</button>
+                    </div>
                 </div>
             `).join('');
             
+            document.querySelectorAll('[data-assign]').forEach(select => {
+                select.addEventListener('change', (e) => {
+                    const order = orders.find(o => o.id === select.dataset.assign);
+                    if (order) {
+                        const worker = workers.find(w => w.id === e.target.value);
+                        order.workerId = worker?.id || null;
+                        order.workerName = worker?.name || null;
+                        saveAll();
+                        render();
+                    }
+                });
+            });
+            
             document.querySelectorAll('[data-delete]').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    orders = orders.filter(o => o.id !== btn.dataset.delete);
-                    saveAll();
-                    render();
+                    if (confirm('Удалить заказ?')) {
+                        orders = orders.filter(o => o.id !== btn.dataset.delete);
+                        saveAll();
+                        render();
+                    }
                 });
             });
         }
     }
 }
 
-// ==================== МАСТЕР ====================
-function renderWorkerPart() {
-    let workerOrders = orders.filter(o => o.workerId === currentUser?.id);
+function renderWorker() {
+    const workerOrders = orders.filter(o => o.workerId === currentUser?.id);
     
-    let html = `
+    app.innerHTML = `
         <div class="app">
             <div class="header">
                 <div class="header-left">
@@ -434,68 +300,124 @@ function renderWorkerPart() {
         </div>
     `;
     
-    appRoot.innerHTML = html;
-    document.getElementById('logoutBtn')?.addEventListener('click', logout);
+    document.getElementById('logoutBtn')?.addEventListener('click', () => {
+        currentRole = 'user';
+        currentUser = null;
+        window.location.hash = '';
+        render();
+    });
     
     const container = document.getElementById('ordersList');
     if (container) {
         if (workerOrders.length === 0) {
-            container.innerHTML = '<div style="padding:2rem; text-align:center;">Нет заказов</div>';
+            container.innerHTML = '<div style="text-align:center; padding:2rem; color:#888;">Нет назначенных заказов</div>';
         } else {
             container.innerHTML = workerOrders.map(order => `
                 <div class="order-card">
-                    <strong>${escapeHtml(order.fio)}</strong>
+                    <div class="order-header">
+                        <strong>${escapeHtml(order.fio)}</strong>
+                        <span class="order-status status-${order.status}">${getStatusText(order.status)}</span>
+                    </div>
                     <div>📞 ${escapeHtml(order.phone)}</div>
                     <div>📍 ${escapeHtml(order.address || '—')}</div>
-                    <div>Статус: ${order.status === 'pending' ? 'Новый' : order.status === 'in-progress' ? 'В работе' : 'Завершён'}</div>
-                    <div class="order-actions">
-                        ${order.status !== 'completed' ? `<button class="btn-sm btn-success" data-complete="${order.id}">✅ Завершить</button>` : ''}
-                        <button class="btn-sm" data-start="${order.id}">🔧 Начать</button>
+                    ${order.problem ? `<div class="order-problem">📝 ${escapeHtml(order.problem)}</div>` : ''}
+                    <div class="order-actions" style="margin-top: 0.5rem;">
+                        ${order.status === 'pending' ? `<button data-start="${order.id}" class="btn-sm">🔧 Начать работу</button>` : ''}
+                        ${order.status === 'in-progress' ? `<button data-complete="${order.id}" class="btn-sm btn-success">✅ Завершить</button>` : ''}
                     </div>
                 </div>
             `).join('');
             
-            document.querySelectorAll('[data-complete]').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const order = orders.find(o => o.id === btn.dataset.complete);
-                    if (order) { order.status = 'completed'; saveAll(); render(); }
-                });
-            });
             document.querySelectorAll('[data-start]').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const order = orders.find(o => o.id === btn.dataset.start);
-                    if (order && order.status === 'pending') { order.status = 'in-progress'; saveAll(); render(); }
+                    if (order) { order.status = 'in-progress'; saveAll(); render(); }
+                });
+            });
+            
+            document.querySelectorAll('[data-complete]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const order = orders.find(o => o.id === btn.dataset.complete);
+                    if (order && confirm('Завершить заказ?')) { order.status = 'completed'; saveAll(); render(); }
                 });
             });
         }
     }
 }
 
+function getStatusText(status) {
+    const map = { pending: 'Новый', 'in-progress': 'В работе', completed: 'Завершён' };
+    return map[status] || status;
+}
+
 function escapeHtml(str) {
     if (!str) return '';
-    return str.replace(/[&<>]/g, function(m) {
-        if (m === '&') return '&amp;';
-        if (m === '<') return '&lt;';
-        if (m === '>') return '&gt;';
-        return m;
+    return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
+}
+
+function showLoginModal(role) {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id = 'loginModal';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 350px;">
+            <div class="modal-header">
+                <h3>Вход в ${role === 'admin' ? 'Админ-панель' : 'Кабинет мастера'}</h3>
+                <button class="modal-close" id="closeModal">&times;</button>
+            </div>
+            <div class="form-group"><label>Логин</label><input type="text" id="loginInput" placeholder="Логин"></div>
+            <div class="form-group"><label>Пароль</label><input type="password" id="passwordInput" placeholder="Пароль"></div>
+            <button class="btn-primary" id="submitLogin" style="width:100%;">Войти</button>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    
+    const closeModal = () => modal.remove();
+    document.getElementById('closeModal')?.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    
+    document.getElementById('submitLogin')?.addEventListener('click', () => {
+        const login = document.getElementById('loginInput').value.trim();
+        const password = document.getElementById('passwordInput').value;
+        
+        if (role === 'admin') {
+            if (login === ADMIN_LOGIN && password === ADMIN_PASSWORD) {
+                currentRole = 'admin';
+                currentUser = null;
+                closeModal();
+                render();
+            } else {
+                alert('Неверный логин или пароль');
+            }
+        } else if (role === 'worker') {
+            const worker = workers.find(w => w.login === login && w.password === password);
+            if (worker) {
+                currentRole = 'worker';
+                currentUser = worker;
+                closeModal();
+                render();
+            } else {
+                alert('Неверный логин или пароль');
+            }
+        }
     });
 }
 
-function checkUrlForAuth() {
+function checkHash() {
     const hash = window.location.hash;
     if (hash === '#admin') {
-        setTimeout(() => showAuthModalFunc(ROLES.ADMIN), 500);
+        showLoginModal('admin');
     } else if (hash === '#worker') {
-        setTimeout(() => showAuthModalFunc(ROLES.WORKER), 500);
+        showLoginModal('worker');
     }
 }
 
+// ==================== ЗАПУСК ====================
 window.addEventListener('hashchange', () => {
-    if (currentRole === ROLES.USER) {
-        checkUrlForAuth();
-    }
+    if (currentRole === 'user') checkHash();
 });
 
-// ==================== ЗАПУСК ====================
-console.log('🚀 Запуск...');
+// Инициализация
+initSupabase();
 loadFromSupabase();
+checkHash();
