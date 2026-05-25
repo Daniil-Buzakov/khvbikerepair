@@ -1,8 +1,4 @@
-// ==================== SUPABASE НАСТРОЙКА ====================
-const SUPABASE_URL = 'https://sjmubbiqceluomzbwwzw.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_2PVFcZgK_9TIR38CLZLf8w_dQ3R6aLn';
-
-let supabaseClient = null;
+// ==================== ЛОКАЛЬНАЯ ВЕРСИЯ (localStorage) ====================
 let currentRole = 'user';
 let currentUser = null;
 let currentAdminTab = 'orders';
@@ -13,147 +9,45 @@ let workers = [];
 const ADMIN_LOGIN = 'DaniilBuzakov';
 const ADMIN_PASSWORD = '123654123Aa@';
 
-// Инициализация
-try {
-    if (typeof window.supabase !== 'undefined') {
-        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        console.log('✅ Supabase готов');
-        console.log('🔗 Подключен к:', SUPABASE_URL);
-    }
-} catch(e) { console.error(e); }
+// Начальные данные
+const defaultPriceList = [
+    { id: 'p1', name: 'Замена камеры', price: 500 },
+    { id: 'p2', name: 'Настройка переключателей', price: 700 },
+    { id: 'p3', name: 'Замена тормозных колодок', price: 600 },
+    { id: 'p4', name: 'Смазка цепи', price: 300 },
+    { id: 'p5', name: 'Ремонт колеса', price: 900 },
+    { id: 'p6', name: 'Диагностика', price: 500 }
+];
+
+const defaultWorkers = [
+    { id: 'w1', name: 'Алексей', phone: '+7 999 123-45-67', login: 'alexey', password: '123' },
+    { id: 'w2', name: 'Дмитрий', phone: '+7 999 234-56-78', login: 'dmitry', password: '123' },
+    { id: 'w3', name: 'Сергей', phone: '+7 999 345-67-89', login: 'sergey', password: '123' }
+];
 
 function generateId() { return Date.now() + '-' + Math.random().toString(36).substr(2, 8); }
 
 // Сохранение в localStorage
 function saveToLocal() {
-    localStorage.setItem('khv_orders', JSON.stringify(orders));
-    localStorage.setItem('khv_prices', JSON.stringify(priceList));
-    localStorage.setItem('khv_workers', JSON.stringify(workers));
+    localStorage.setItem('khv_orders_v2', JSON.stringify(orders));
+    localStorage.setItem('khv_prices_v2', JSON.stringify(priceList));
+    localStorage.setItem('khv_workers_v2', JSON.stringify(workers));
+    console.log('💾 Сохранено');
 }
 
 function loadFromLocal() {
-    orders = JSON.parse(localStorage.getItem('khv_orders') || '[]');
-    priceList = JSON.parse(localStorage.getItem('khv_prices') || '[]');
-    workers = JSON.parse(localStorage.getItem('khv_workers') || '[]');
-    console.log('📁 Загружено из localStorage:', orders.length, 'заказов');
-}
-
-// Загрузка из Supabase - ИСПРАВЛЕНО: используем repair_orders
-async function loadFromSupabase() {
-    if (!supabaseClient) {
-        console.log('⚠️ Supabase не доступен, используем localStorage');
-        loadFromLocal();
-        render();
-        return;
-    }
+    const savedOrders = localStorage.getItem('khv_orders_v2');
+    const savedPrices = localStorage.getItem('khv_prices_v2');
+    const savedWorkers = localStorage.getItem('khv_workers_v2');
     
-    console.log('🔄 Загрузка из Supabase...');
-    
-    try {
-        // ПРЯМОЙ ЗАПРОС к repair_orders (НЕ orders!)
-        const { data: o, error: ordersError } = await supabaseClient
-            .from('repair_orders')
-            .select('*');
-        
-        if (ordersError) {
-            console.error('Ошибка загрузки заказов:', ordersError);
-            throw ordersError;
-        }
-        
-        if (o && o.length) {
-            orders = o.map(item => ({
-                id: item.id,
-                fio: item.fio,
-                phone: item.phone,
-                address: item.address,
-                desiredTime: item.desiredtime || '',
-                problem: item.problem,
-                status: item.status || 'new',
-                workerId: item.workerid || null,
-                workerName: item.workername || null,
-                services: item.services || [],
-                parts: item.parts || [],
-                total: item.total || 0,
-                note: item.note || '',
-                createdAt: item.created_at || Date.now()
-            }));
-            console.log('✅ Заказов загружено из Supabase:', orders.length);
-        } else {
-            console.log('⚠️ Нет заказов в Supabase');
-        }
-        
-        // Загружаем прайс
-        const { data: p } = await supabaseClient.from('price_list').select('*');
-        if (p && p.length) {
-            priceList = p;
-            console.log('✅ Прайс загружен:', priceList.length);
-        }
-        
-        // Загружаем работников
-        const { data: w } = await supabaseClient.from('workers').select('*');
-        if (w && w.length) {
-            workers = w;
-            console.log('✅ Работники загружены:', workers.length);
-        }
-        
-        saveToLocal();
-    } catch(e) { 
-        console.error('❌ Ошибка загрузки:', e); 
-        loadFromLocal(); 
-    }
-    render();
-    checkHash();
-}
-
-// Сохранение в Supabase
-async function saveToSupabase() {
-    if (!supabaseClient) return;
-    
-    try {
-        // Сохраняем заказы в repair_orders
-        for (const order of orders) {
-            const repairOrder = {
-                id: order.id,
-                fio: order.fio,
-                phone: order.phone,
-                address: order.address || '',
-                desiredtime: order.desiredTime || '',
-                problem: order.problem || '',
-                status: order.status || 'new',
-                workerid: order.workerId || null,
-                workername: order.workerName || null,
-                services: order.services || [],
-                parts: order.parts || [],
-                total: order.total || 0,
-                note: order.note || '',
-                created_at: order.createdAt || Date.now()
-            };
-            
-            const { error } = await supabaseClient
-                .from('repair_orders')
-                .upsert(repairOrder);
-            if (error) console.error('Order error:', error);
-        }
-        
-        // Сохраняем прайс
-        for (const item of priceList) {
-            await supabaseClient.from('price_list').upsert(item);
-        }
-        
-        // Сохраняем работников
-        for (const worker of workers) {
-            await supabaseClient.from('workers').upsert(worker);
-        }
-        
-        console.log('✅ Сохранено в Supabase');
-    } catch(e) { 
-        console.error('❌ Ошибка сохранения:', e); 
-    }
+    orders = savedOrders ? JSON.parse(savedOrders) : [];
+    priceList = savedPrices ? JSON.parse(savedPrices) : defaultPriceList;
+    workers = savedWorkers ? JSON.parse(savedWorkers) : defaultWorkers;
+    console.log('📂 Загружено:', orders.length, 'заказов');
 }
 
 function saveAll() {
     saveToLocal();
-    saveToSupabase();
 }
 
 const app = document.getElementById('app');
@@ -192,7 +86,7 @@ function renderUser() {
         </div>
     `;
     
-    document.getElementById('requestForm')?.addEventListener('submit', async (e) => {
+    document.getElementById('requestForm')?.addEventListener('submit', (e) => {
         e.preventDefault();
         const fio = document.getElementById('fio').value.trim();
         const phone = document.getElementById('phone').value.trim();
@@ -213,9 +107,10 @@ function renderUser() {
             note: '',
             createdAt: Date.now()
         });
-        await saveAll();
+        saveAll();
         alert('✅ Заявка отправлена!');
         document.getElementById('requestForm').reset();
+        render();
     });
 }
 
@@ -266,17 +161,16 @@ function renderAdmin() {
             </div>
             
             <h3>🟡 Новые (${newOrders.length})</h3>
-            ${renderOrdersHtml(newOrders)}
+            ${renderOrdersList(newOrders)}
             
             <h3>🔄 В работе (${inProgress.length})</h3>
-            ${renderOrdersHtml(inProgress)}
+            ${renderOrdersList(inProgress)}
             
             <h3>✅ Завершённые (${completed.length})</h3>
-            ${renderOrdersHtml(completed)}
+            ${renderOrdersList(completed)}
         `;
         
         document.getElementById('createOrderBtn')?.addEventListener('click', () => openCreateModal());
-        attachOrderEvents();
         
     } else if (currentAdminTab === 'price') {
         content.innerHTML = `
@@ -294,20 +188,20 @@ function renderAdmin() {
             `).join('')}
         `;
         
-        document.getElementById('addPriceBtn')?.addEventListener('click', async () => {
+        document.getElementById('addPriceBtn')?.addEventListener('click', () => {
             const name = document.getElementById('newPriceName').value.trim();
             const price = parseInt(document.getElementById('newPriceCost').value);
             if (name && price > 0) {
                 priceList.push({ id: generateId(), name, price });
-                await saveAll();
+                saveAll();
                 renderAdmin();
             } else alert('Введите название и цену');
         });
         
         document.querySelectorAll('[data-del]').forEach(btn => {
-            btn.addEventListener('click', async () => {
+            btn.addEventListener('click', () => {
                 priceList = priceList.filter(p => p.id !== btn.dataset.del);
-                await saveAll();
+                saveAll();
                 renderAdmin();
             });
         });
@@ -332,22 +226,22 @@ function renderAdmin() {
             `).join('')}
         `;
         
-        document.getElementById('addWorkerBtn')?.addEventListener('click', async () => {
+        document.getElementById('addWorkerBtn')?.addEventListener('click', () => {
             const name = document.getElementById('newWorkerName').value.trim();
             const phone = document.getElementById('newWorkerPhone').value.trim();
             const login = document.getElementById('newWorkerLogin').value.trim();
             const password = document.getElementById('newWorkerPassword').value;
             if (name && phone && login && password) {
                 workers.push({ id: generateId(), name, phone, login, password });
-                await saveAll();
+                saveAll();
                 renderAdmin();
             } else alert('Заполните все поля');
         });
         
         document.querySelectorAll('[data-del]').forEach(btn => {
-            btn.addEventListener('click', async () => {
+            btn.addEventListener('click', () => {
                 workers = workers.filter(w => w.id !== btn.dataset.del);
-                await saveAll();
+                saveAll();
                 renderAdmin();
             });
         });
@@ -374,7 +268,7 @@ function renderAdmin() {
     }
 }
 
-function renderOrdersHtml(ordersList) {
+function renderOrdersList(ordersList) {
     if (!ordersList.length) return '<div style="padding:0.5rem; color:#888;">Нет заказов</div>';
     
     return ordersList.map(order => `
@@ -386,70 +280,253 @@ function renderOrdersHtml(ordersList) {
             <div>📞 ${escapeHtml(order.phone)}</div>
             <div>📍 ${escapeHtml(order.address || '—')}</div>
             <div>📝 ${escapeHtml(order.problem || '—')}</div>
-            <div>💰 <input type="number" data-price="${order.id}" value="${order.total || 0}" style="width:80px;"> ₽</div>
+            <div>💰 ${order.total || 0} ₽</div>
             <div style="margin-top:0.5rem;">
-                <select data-assign="${order.id}" class="btn-sm">
-                    <option value="">Назначить мастера</option>
-                    ${workers.map(w => `<option value="${w.id}" ${order.workerId === w.id ? 'selected' : ''}>${escapeHtml(w.name)}</option>`).join('')}
-                </select>
-                <select data-status="${order.id}" class="btn-sm">
-                    <option value="new" ${order.status === 'new' ? 'selected' : ''}>🟡 Новый</option>
-                    <option value="calculated" ${order.status === 'calculated' ? 'selected' : ''}>💰 Рассчитан</option>
-                    <option value="agreed" ${order.status === 'agreed' ? 'selected' : ''}>✅ Согласован</option>
-                    <option value="assigned" ${order.status === 'assigned' ? 'selected' : ''}>🔧 Назначен</option>
-                    <option value="completed" ${order.status === 'completed' ? 'selected' : ''}>🏁 Завершён</option>
-                </select>
-                <button data-delete="${order.id}" class="btn-sm" style="background:#ef4444;color:white;">🗑 Удалить</button>
+                <button class="btn-sm" onclick="openEditOrderModal('${order.id}')">✏️ Редактировать</button>
+                <button class="btn-sm" data-delete="${order.id}" style="background:#ef4444;color:white;">🗑 Удалить</button>
             </div>
         </div>
     `).join('');
 }
 
-function attachOrderEvents() {
-    document.querySelectorAll('[data-price]').forEach(inp => {
-        inp.addEventListener('change', async (e) => {
-            const order = orders.find(o => o.id === inp.dataset.price);
-            if (order) {
-                order.total = parseInt(e.target.value) || 0;
-                await saveAll();
-            }
+// ==================== МОДАЛЬНОЕ ОКНО РЕДАКТИРОВАНИЯ ЗАКАЗА ====================
+function openEditOrderModal(orderId) {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    
+    // Копируем данные для редактирования
+    let services = order.services ? [...order.services] : [];
+    let parts = order.parts ? [...order.parts] : [];
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id = 'editOrderModal';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 700px; max-height: 85vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h3>✏️ Редактирование заказа #${order.id.slice(-6)}</h3>
+                <button class="modal-close" id="closeModal">&times;</button>
+            </div>
+            
+            <!-- Информация о клиенте -->
+            <div style="background: #f1f5f9; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                <h4>👤 Информация о клиенте</h4>
+                <div class="form-group"><label>ФИО</label><input type="text" id="editFio" value="${escapeHtml(order.fio)}"></div>
+                <div class="form-group"><label>Телефон</label><input type="text" id="editPhone" value="${escapeHtml(order.phone)}"></div>
+                <div class="form-group"><label>Адрес</label><input type="text" id="editAddress" value="${escapeHtml(order.address || '')}"></div>
+                <div class="form-group"><label>Желаемое время</label><input type="datetime-local" id="editTime" value="${order.desiredTime || ''}"></div>
+                <div class="form-group"><label>Описание проблемы</label><textarea id="editProblem" rows="2">${escapeHtml(order.problem || '')}</textarea></div>
+            </div>
+            
+            <!-- Услуги -->
+            <div style="margin-bottom: 1rem;">
+                <h4>🛠 Услуги</h4>
+                <div id="servicesList"></div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                    <select id="serviceSelect" class="btn-sm" style="flex:2;">
+                        <option value="">-- Выберите услугу --</option>
+                        ${priceList.map(p => `<option value="${p.id}" data-price="${p.price}">${escapeHtml(p.name)} - ${p.price}₽</option>`).join('')}
+                    </select>
+                    <input type="number" id="serviceQty" placeholder="Кол-во" value="1" min="1" style="width: 80px;">
+                    <button class="btn-sm" id="addServiceBtn">➕ Добавить</button>
+                </div>
+            </div>
+            
+            <!-- Запчасти -->
+            <div style="margin-bottom: 1rem;">
+                <h4>🔩 Запчасти</h4>
+                <div id="partsList"></div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                    <input type="text" id="partName" placeholder="Название запчасти" style="flex:2;">
+                    <input type="number" id="partPrice" placeholder="Цена" style="width: 100px;">
+                    <input type="number" id="partQty" placeholder="Кол-во" value="1" style="width: 80px;">
+                    <button class="btn-sm" id="addPartBtn">➕ Добавить</button>
+                </div>
+            </div>
+            
+            <!-- Заметка -->
+            <div class="form-group">
+                <label>📝 Заметка</label>
+                <textarea id="editNote" rows="2" placeholder="Внутренняя заметка...">${escapeHtml(order.note || '')}</textarea>
+            </div>
+            
+            <!-- Назначение мастера и статус -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                    <label>👨‍🔧 Мастер</label>
+                    <select id="editWorker" class="btn-sm">
+                        <option value="">-- Не назначен --</option>
+                        ${workers.map(w => `<option value="${w.id}" ${order.workerId === w.id ? 'selected' : ''}>${escapeHtml(w.name)}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>📊 Статус</label>
+                    <select id="editStatus" class="btn-sm">
+                        <option value="new" ${order.status === 'new' ? 'selected' : ''}>🟡 Новый</option>
+                        <option value="calculated" ${order.status === 'calculated' ? 'selected' : ''}>💰 Рассчитан</option>
+                        <option value="agreed" ${order.status === 'agreed' ? 'selected' : ''}>✅ Согласован</option>
+                        <option value="assigned" ${order.status === 'assigned' ? 'selected' : ''}>🔧 Назначен</option>
+                        <option value="completed" ${order.status === 'completed' ? 'selected' : ''}>🏁 Завершён</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Итого и кнопки -->
+            <div id="orderTotal" style="margin-top: 1rem; padding: 0.75rem; background: #eef2ff; border-radius: 0.5rem; text-align: center; font-weight: bold;">
+                💰 Общая стоимость: ${order.total || 0} ₽
+            </div>
+            
+            <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                <button class="btn-primary" id="saveOrderBtn">💾 Сохранить изменения</button>
+                <button class="btn-sm" id="cancelBtn">Отмена</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    
+    // Функции обновления списков
+    function updateServicesList() {
+        const container = document.getElementById('servicesList');
+        if (!container) return;
+        container.innerHTML = services.map((s, idx) => `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; border-bottom: 1px solid #e2e8f0;">
+                <span>${escapeHtml(s.name)} x${s.quantity} = ${s.price * s.quantity}₽</span>
+                <button class="btn-sm" data-remove-service="${idx}" style="background:#ef4444;color:white;">✖</button>
+            </div>
+        `).join('');
+        
+        document.querySelectorAll('[data-remove-service]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                services.splice(parseInt(btn.dataset.removeService), 1);
+                updateTotal();
+                updateServicesList();
+            });
         });
+    }
+    
+    function updatePartsList() {
+        const container = document.getElementById('partsList');
+        if (!container) return;
+        container.innerHTML = parts.map((p, idx) => `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; border-bottom: 1px solid #e2e8f0;">
+                <span>${escapeHtml(p.name)} x${p.quantity} = ${p.price * p.quantity}₽</span>
+                <button class="btn-sm" data-remove-part="${idx}" style="background:#ef4444;color:white;">✖</button>
+            </div>
+        `).join('');
+        
+        document.querySelectorAll('[data-remove-part]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                parts.splice(parseInt(btn.dataset.removePart), 1);
+                updateTotal();
+                updatePartsList();
+            });
+        });
+    }
+    
+    function updateTotal() {
+        const servicesSum = services.reduce((s, svc) => s + (svc.price * svc.quantity), 0);
+        const partsSum = parts.reduce((s, p) => s + (p.price * p.quantity), 0);
+        const total = servicesSum + partsSum;
+        const totalDiv = document.getElementById('orderTotal');
+        if (totalDiv) totalDiv.innerHTML = `💰 Общая стоимость: ${total} ₽`;
+        return total;
+    }
+    
+    // Добавление услуги
+    document.getElementById('addServiceBtn')?.addEventListener('click', () => {
+        const select = document.getElementById('serviceSelect');
+        const serviceId = select.value;
+        if (!serviceId) { alert('Выберите услугу'); return; }
+        const qty = parseInt(document.getElementById('serviceQty').value) || 1;
+        const service = priceList.find(p => p.id === serviceId);
+        if (!service) return;
+        
+        const existing = services.find(s => s.id === serviceId);
+        if (existing) {
+            existing.quantity += qty;
+        } else {
+            services.push({ id: serviceId, name: service.name, price: service.price, quantity: qty });
+        }
+        updateTotal();
+        updateServicesList();
+        document.getElementById('serviceSelect').value = '';
+        document.getElementById('serviceQty').value = '1';
     });
     
-    document.querySelectorAll('[data-assign]').forEach(select => {
-        select.addEventListener('change', async (e) => {
-            const order = orders.find(o => o.id === select.dataset.assign);
-            if (order) {
-                const worker = workers.find(w => w.id === e.target.value);
-                order.workerId = e.target.value || null;
-                order.workerName = worker?.name || null;
-                await saveAll();
-                renderAdmin();
-            }
-        });
+    // Добавление запчасти
+    document.getElementById('addPartBtn')?.addEventListener('click', () => {
+        const name = document.getElementById('partName').value.trim();
+        const price = parseInt(document.getElementById('partPrice').value);
+        const qty = parseInt(document.getElementById('partQty').value) || 1;
+        if (!name || isNaN(price)) { alert('Введите название и цену'); return; }
+        
+        parts.push({ name, price, quantity: qty });
+        updateTotal();
+        updatePartsList();
+        document.getElementById('partName').value = '';
+        document.getElementById('partPrice').value = '';
+        document.getElementById('partQty').value = '1';
     });
     
-    document.querySelectorAll('[data-status]').forEach(select => {
-        select.addEventListener('change', async (e) => {
-            const order = orders.find(o => o.id === select.dataset.status);
-            if (order) {
-                order.status = e.target.value;
-                await saveAll();
-                renderAdmin();
-            }
-        });
+    // Сохранение
+    document.getElementById('saveOrderBtn')?.addEventListener('click', () => {
+        const fio = document.getElementById('editFio').value.trim();
+        if (!fio) { alert('Введите ФИО'); return; }
+        
+        order.fio = fio;
+        order.phone = document.getElementById('editPhone').value;
+        order.address = document.getElementById('editAddress').value;
+        order.desiredTime = document.getElementById('editTime').value;
+        order.problem = document.getElementById('editProblem').value;
+        order.note = document.getElementById('editNote').value;
+        order.workerId = document.getElementById('editWorker').value || null;
+        order.workerName = workers.find(w => w.id === order.workerId)?.name || null;
+        order.status = document.getElementById('editStatus').value;
+        order.services = services;
+        order.parts = parts;
+        order.total = updateTotal();
+        
+        saveAll();
+        alert('✅ Изменения сохранены!');
+        modal.remove();
+        renderAdmin();
     });
     
+    // Закрытие
+    document.getElementById('closeModal')?.addEventListener('click', () => modal.remove());
+    document.getElementById('cancelBtn')?.addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+    
+    // Удаление заказа из модального окна
     document.querySelectorAll('[data-delete]').forEach(btn => {
-        btn.addEventListener('click', async () => {
+        btn.addEventListener('click', () => {
             if (confirm('Удалить заказ?')) {
                 orders = orders.filter(o => o.id !== btn.dataset.delete);
-                await saveAll();
+                saveAll();
+                modal.remove();
                 renderAdmin();
             }
         });
     });
+    
+    updateServicesList();
+    updatePartsList();
+    updateTotal();
 }
+
+// Глобальная функция для вызова из onclick
+window.openEditOrderModal = openEditOrderModal;
+
+// Удаление заказа (для кнопок в списке)
+document.addEventListener('click', (e) => {
+    if (e.target.matches('[data-delete]')) {
+        if (confirm('Удалить заказ?')) {
+            orders = orders.filter(o => o.id !== e.target.dataset.delete);
+            saveAll();
+            renderAdmin();
+        }
+    }
+});
 
 function openCreateModal() {
     const modal = document.createElement('div');
@@ -470,7 +547,7 @@ function openCreateModal() {
     document.getElementById('closeModal')?.addEventListener('click', close);
     modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
     
-    document.getElementById('saveModalBtn')?.addEventListener('click', async () => {
+    document.getElementById('saveModalBtn')?.addEventListener('click', () => {
         const fio = document.getElementById('modalFio').value.trim();
         const phone = document.getElementById('modalPhone').value.trim();
         if (!fio || !phone) { alert('Заполните ФИО и телефон'); return; }
@@ -489,7 +566,7 @@ function openCreateModal() {
             note: '',
             createdAt: Date.now()
         });
-        await saveAll();
+        saveAll();
         alert('✅ Заказ создан!');
         close();
         renderAdmin();
@@ -521,6 +598,8 @@ function renderWorker() {
                         <strong>${escapeHtml(o.fio)}</strong><br>
                         📞 ${escapeHtml(o.phone)}<br>
                         📍 ${escapeHtml(o.address || '—')}<br>
+                        📝 ${escapeHtml(o.problem || '—')}<br>
+                        🛠 ${o.services?.map(s => `${s.name} x${s.quantity}`).join(', ') || '—'}<br>
                         💰 ${o.total || 0} ₽<br>
                         <button data-complete="${o.id}" class="btn-sm btn-success">✅ Завершить</button>
                     </div>
@@ -538,11 +617,11 @@ function renderWorker() {
     });
     
     document.querySelectorAll('[data-complete]').forEach(btn => {
-        btn.addEventListener('click', async () => {
+        btn.addEventListener('click', () => {
             const order = orders.find(o => o.id === btn.dataset.complete);
             if (order && confirm('Завершить заказ?')) {
                 order.status = 'completed';
-                await saveAll();
+                saveAll();
                 renderWorker();
             }
         });
@@ -614,5 +693,6 @@ function checkHash() {
 window.addEventListener('hashchange', () => { if (currentRole === 'user') checkHash(); });
 
 // ==================== ЗАПУСК ====================
-console.log('🚀 Запуск приложения...');
-loadFromSupabase();
+loadFromLocal();
+render();
+checkHash();
