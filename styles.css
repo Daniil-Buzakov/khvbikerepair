@@ -571,3 +571,87 @@ body {
     gap: 0.5rem;
     margin-top: 0.5rem;
 }
+
+/* Админ меню */
+.admin-menu {
+    display: flex;
+    gap: 0.5rem;
+    background: #f1f5f9;
+    padding: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    flex-wrap: wrap;
+}
+
+.admin-menu-btn {
+    background: transparent;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.admin-menu-btn:hover {
+    background: #e2e8f0;
+}
+
+.admin-menu-btn.active {
+    background: #3b82f6;
+    color: white;
+}
+
+/* Статистика */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.stats-card {
+    background: #f1f5f9;
+    padding: 1rem;
+    border-radius: 0.75rem;
+    text-align: center;
+}
+
+.stats-card.full-width {
+    grid-column: 1 / -1;
+}
+
+.stats-value {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #1e293b;
+}
+
+.stats-label {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-top: 0.25rem;
+}
+
+.worker-stats-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.price-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.worker-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+}
