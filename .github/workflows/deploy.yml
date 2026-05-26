@@ -25,29 +25,35 @@ jobs:
         with:
           python-version: '3.11'
       
+      - name: Create necessary directories
+        run: |
+          mkdir -p static/main/css
+          mkdir -p static/main/js
+          mkdir -p media
+          touch static/main/css/style.css
+          touch static/main/js/main.js
+      
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install Django==4.2.7
           pip install django-distill==1.9.0
-          pip install whitenoise==6.5.0
-          pip install django-crispy-forms==2.1
-          pip install crispy-bootstrap5==0.7
       
       - name: Create database and collect static
         run: |
           python manage.py migrate --noinput
-          python manage.py collectstatic --noinput
+          python manage.py collectstatic --noinput --clear
         env:
           SECRET_KEY: 'django-insecure-build-key-temp'
           DEBUG: 'False'
       
       - name: Distill site
         run: |
-          python manage.py distill-local --force public
+          echo "yes" | python manage.py distill-local --force public
         env:
           SECRET_KEY: 'django-insecure-build-key-temp'
           DEBUG: 'False'
+          DJANGO_DISTILL_FORCE: 'yes'
       
       - name: Add .nojekyll
         run: touch public/.nojekyll
