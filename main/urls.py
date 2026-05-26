@@ -2,34 +2,17 @@ from django.urls import path
 from django_distill import distill_path
 from . import views
 
-# Функции для генерации статических страниц
-def get_index():
-    """Возвращает список всех страниц для генерации (для главной страницы)"""
-    return [None]  # Один раз генерируем главную страницу
-
-def get_worker():
-    """Генерация страницы работника"""
-    return [None]
-
-def get_admin():
-    """Генерация админ-панели"""
-    return [None]
-
 urlpatterns = [
     # Главная страница
-    distill_path('', views.index, name='index', 
-                 distill_file='index.html',
-                 distill_func=get_index),
+    distill_path('', views.index, name='index', distill_file='index.html'),
     
     # Панель работника
     distill_path('worker/', views.worker_static, name='worker_static', 
-                 distill_file='worker/index.html',
-                 distill_func=get_worker),
+                 distill_file='worker/index.html'),
     
     # Админ-панель
     distill_path('admin-panel/', views.admin_static, name='admin_static', 
-                 distill_file='admin/index.html',
-                 distill_func=get_admin),
+                 distill_file='admin/index.html'),
     
     # API endpoints (не генерируются в статику)
     path('api/create-request/', views.create_request, name='create_request'),

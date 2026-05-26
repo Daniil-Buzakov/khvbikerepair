@@ -30,8 +30,8 @@ jobs:
           mkdir -p static/main/css
           mkdir -p static/main/js
           mkdir -p media
-          touch static/main/css/style.css
-          touch static/main/js/main.js
+          echo "/* Main styles */" > static/main/css/style.css
+          echo "// Main JavaScript" > static/main/js/main.js
       
       - name: Install dependencies
         run: |
@@ -39,21 +39,28 @@ jobs:
           pip install Django==4.2.7
           pip install django-distill==1.9.0
       
-      - name: Create database and collect static
+      - name: Run migrations and collect static
         run: |
           python manage.py migrate --noinput
           python manage.py collectstatic --noinput --clear
         env:
           SECRET_KEY: 'django-insecure-build-key-temp'
           DEBUG: 'False'
+          PYTHONPATH: .
       
       - name: Distill site
         run: |
-          echo "yes" | python manage.py distill-local --force public
+          python manage.py distill-local --force public
         env:
           SECRET_KEY: 'django-insecure-build-key-temp'
           DEBUG: 'False'
-          DJANGO_DISTILL_FORCE: 'yes'
+          DJANGO_SETTINGS_MODULE: 'bike_repair.settings'
+      
+      - name: List generated files
+        run: |
+          ls -la public/
+          ls -la public/worker/ || true
+          ls -la public/admin/ || true
       
       - name: Add .nojekyll
         run: touch public/.nojekyll
