@@ -1,0 +1,6 @@
+Django==4.2.7
+django-crispy-forms==2.1
+crispy-bootstrap5==0.7
+whitenoise==6.5.0
+django-distill==1.9.0
+requests==2.31.0

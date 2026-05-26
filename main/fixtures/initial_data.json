@@ -1,0 +1,29 @@
+[
+  {
+    "model": "main.service",
+    "pk": 1,
+    "fields": {
+      "name": "Ремонт колеса",
+      "price": "500.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "main.service",
+    "pk": 2,
+    "fields": {
+      "name": "Настройка переключателей",
+      "price": "300.00",
+      "is_active": true
+    }
+  },
+  {
+    "model": "main.service",
+    "pk": 3,
+    "fields": {
+      "name": "Замена тормозных колодок",
+      "price": "400.00",
+      "is_active": true
+    }
+  }
+]

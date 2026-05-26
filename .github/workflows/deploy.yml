@@ -1,0 +1,83 @@
+name: Deploy to GitHub Pages
+
+on:
+  # Запуск при пуше в main ветку
+  push:
+    branches: ["main"]
+  
+  # Запуск вручную через интерфейс GitHub
+  workflow_dispatch:
+
+# Устанавливаем права доступа
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Ограничиваем одновременные деплои
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # Job для сборки статического сайта
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Клонируем репозиторий
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # 2. Устанавливаем Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      # 3. Устанавливаем зависимости
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      # 4. Создаем временную базу данных для генерации
+      - name: Prepare database
+        run: |
+          python manage.py makemigrations
+          python manage.py migrate
+          python manage.py loaddata initial_data.json  # Если есть начальные данные
+      
+      # 5. Генерируем статический сайт
+      - name: Build static site with django-distill
+        run: |
+          python manage.py distill-local --force public
+        env:
+          SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+          DEBUG: 'False'
+      
+      # 6. Добавляем файл .nojekyll (нужен для GitHub Pages)
+      - name: Add .nojekyll file
+        run: touch public/.nojekyll
+      
+      # 7. Создаем CNAME файл для кастомного домена
+      - name: Create CNAME file
+        run: echo "khvbikerepair.ru" > public/CNAME
+      
+      # 8. Загружаем артефакт для деплоя
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './public'
+
+  # Job для деплоя на GitHub Pages
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
